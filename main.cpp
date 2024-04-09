@@ -14,6 +14,7 @@ int main() {
     init_pair(4, COLOR_WHITE, COLOR_BLUE);
     init_pair(5, COLOR_RED, COLOR_BLUE);
     init_pair(6, COLOR_WHITE, COLOR_CYAN);
+    init_pair(7, COLOR_WHITE, COLOR_BLUE);
     keypad(stdscr, true);
     curs_set(0);
 

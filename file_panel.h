@@ -13,10 +13,13 @@
 #define DATE_LEN 16
 #define LEN_LINE_FIRST 30
 #define MAX_SIZE_LEN 11
+#define SIZE_FIELD_BUFFER_1 5
 #define HEADER_NAME "Name"
 #define HEADER_SIZE "Size"
 #define HEADER_MODIFY_DATE "Modify date"
 #define HEADER_CREATE_DIR " Create dir "
+#define OK_BUTTON "[ OK ]"
+#define NO_BUTTON "[ NO ]"
 
 enum class CONTENT_TYPE {
     IS_DIR = 0,

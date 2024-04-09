@@ -257,14 +257,19 @@ void create_functional_panel() {
 
     curs_set(1);
 
-    FIELD *fields[3];
+    FIELD *fields[SIZE_FIELD_BUFFER_1];
     fields[0] = new_field(1, LEN_LINE_FIRST, 1, 15, 0, 0);
     fields[1] = new_field(1, LEN_LINE_FIRST, 3, 15, 0, 0);
-    fields[2] = nullptr;
+    fields[2] = new_field(1, static_cast<int>(strlen(OK_BUTTON)), 5, 20, 0, 0);
+    fields[3] = new_field(1, static_cast<int>(strlen(NO_BUTTON)), 5, 34, 0, 0);
+    fields[4] = nullptr;
 
-    set_field_back(fields[0], COLOR_PAIR(6));
-    set_field_back(fields[1], COLOR_PAIR(6));
-
+    set_field_back(fields[0], COLOR_PAIR(6) | A_BOLD);
+    set_field_back(fields[1], COLOR_PAIR(6) | A_BOLD);
+    set_field_back(fields[2], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[3], COLOR_PAIR(7) | A_BOLD);
+    set_field_buffer(fields[2], 0, OK_BUTTON);
+    set_field_buffer(fields[3], 0, NO_BUTTON);
     FORM *my_form = new_form(fields);
     set_form_win(my_form, win);
 
@@ -280,8 +285,9 @@ void create_functional_panel() {
 
     navigation_from_functional_panel(win, my_form);
 
-    free_field(fields[0]);
-    free_field(fields[1]);
+    for (size_t i = 0; i < SIZE_FIELD_BUFFER_1 - 1; i++) {
+        free_field(fields[i]);
+    }
     free_form(my_form);
     delwin(subwin);
     delwin(win);
