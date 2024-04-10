@@ -7,14 +7,7 @@ int main() {
     noecho();
     cbreak();
     start_color();
-    start_color();
-    init_pair(1, COLOR_CYAN, COLOR_BLACK);
-    init_pair(2, COLOR_RED, COLOR_BLACK);
-    init_pair(3, COLOR_MAGENTA, COLOR_BLACK);
-    init_pair(4, COLOR_WHITE, COLOR_BLUE);
-    init_pair(5, COLOR_RED, COLOR_BLUE);
-    init_pair(6, COLOR_WHITE, COLOR_CYAN);
-    init_pair(7, COLOR_WHITE, COLOR_BLUE);
+    init_colors();
     keypad(stdscr, true);
     curs_set(0);
 

@@ -17,9 +17,11 @@
 #define HEADER_NAME "Name"
 #define HEADER_SIZE "Size"
 #define HEADER_MODIFY_DATE "Modify date"
-#define HEADER_CREATE_DIR " Create dir "
+#define HEADER_CREATE_DIR " Create symlink "
 #define OK_BUTTON "[ OK ]"
 #define NO_BUTTON "[ NO ]"
+#define LINK_NAME_HEADER "Link name:"
+#define LINK_POINTER_HEADER "Pointing to:"
 
 enum class CONTENT_TYPE {
     IS_DIR = 0,
@@ -68,8 +70,15 @@ public :
     void display_content();
 };
 
+
+void init_colors();
+void move_cursor_right_from_input_field(size_t len, size_t* _current_index, int* _current_offset_field);
+void move_cursor_left_from_input_field(size_t* _current_index, int* _current_offset_field);
+void insert_char_from_input_field(std::string& _current_buffer, size_t* _current_index, int* _current_offset_field, int ch);
+void delete_char_from_input_field(std::string& _current_buffer, size_t* _current_index, int* _offset_field);
+bool is_input_field(size_t _index);
 void create_functional_panel();
-void navigation_from_functional_panel(WINDOW* _win, FORM* _form);
+void navigation_from_functional_panel(WINDOW* _win, FORM* _form, FIELD** _fields);
 void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_t* _ind, int _offset);
 
 

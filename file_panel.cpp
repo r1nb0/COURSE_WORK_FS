@@ -283,7 +283,7 @@ void create_functional_panel() {
     pos_form_cursor(my_form);
     wrefresh(win);
 
-    navigation_from_functional_panel(win, my_form);
+    navigation_from_functional_panel(win, my_form, fields);
 
     for (size_t i = 0; i < SIZE_FIELD_BUFFER_1 - 1; i++) {
         free_field(fields[i]);
@@ -294,14 +294,14 @@ void create_functional_panel() {
     curs_set(0);
 }
 
-void navigation_from_functional_panel(WINDOW* _win, FORM* _form) {
+void navigation_from_functional_panel(WINDOW* _win, FORM* _form, FIELD** _fields) {
     int ch;
     std::string first_field_buffer;
     std::string second_field_buffer;
     std::string* current_buffer = &first_field_buffer;
-    int current_num_field = 0;
     size_t index_first_field = 0;
     size_t index_second_field = 0;
+    size_t index_field = 0;
     int offset_first_field = 0;
     int offset_second_field = 0;
     int* current_offset_field = &offset_first_field;
@@ -309,59 +309,57 @@ void navigation_from_functional_panel(WINDOW* _win, FORM* _form) {
     while((ch = getch()) != '\n' && ch != KEY_RESIZE) {
         switch(ch) {
             case '\t' : {
-                if (current_num_field == 0) {
-                    current_index = &index_second_field;
-                    current_num_field = 1;
-                    current_buffer = &second_field_buffer;
-                    current_offset_field = &offset_second_field;
-                } else {
+                form_driver(_form, REQ_NEXT_FIELD);
+                index_field = field_index(current_field(_form));
+                if (index_field == 0) {
                     current_index = &index_first_field;
-                    current_num_field = 0;
                     current_buffer = &first_field_buffer;
                     current_offset_field = &offset_first_field;
+                    set_field_back(_fields[3], COLOR_PAIR(7) | A_BOLD);
+                    curs_set(1);
+                } else if (index_field == 1) {
+                    current_index = &index_second_field;
+                    current_buffer = &second_field_buffer;
+                    current_offset_field = &offset_second_field;
+                    curs_set(1);
+                } else if (index_field == 2) {
+                    set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
+                    curs_set(0);
+                } else {
+                    set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
+                    set_field_back(_fields[2], COLOR_PAIR(7) | A_BOLD);
+                    curs_set(0);
                 }
-                form_driver(_form, REQ_NEXT_FIELD);
                 break;
             }
             case KEY_LEFT : {
-                if (*current_index != 0) {
-                    (*current_index)--;
-                }
-                if (*current_offset_field == *current_index && *current_index != 0) {
-                    (*current_offset_field)--;
+                if (is_input_field(index_field)) {
+                    move_cursor_left_from_input_field(current_index, current_offset_field);
                 }
                 break;
             }
             case KEY_RIGHT : {
-                if (*current_index >= current_buffer->length()) {
-                        current_buffer->push_back(' ');
-                }
-                (*current_index)++;
-                if (*current_index > LEN_LINE_FIRST - 1 + *current_offset_field) {
-                    (*current_offset_field)++;
+                if (is_input_field(index_field)) {
+                    move_cursor_right_from_input_field(current_buffer->length(), current_index, current_offset_field);
                 }
                 break;
             }
             case KEY_BACKSPACE : {
-                if (!current_buffer->empty() && *current_index != 0) {
-                    current_buffer->erase((*current_index) - 1, 1);
-                    (*current_index)--;
-                }
-                if (*current_offset_field != 0) {
-                    (*current_offset_field)--;
+                if (is_input_field(index_field)) {
+                    delete_char_from_input_field(*current_buffer, current_index, current_offset_field);
                 }
                 break;
             }
             default: {
-                current_buffer->insert(current_buffer->begin() + (*current_index), static_cast<char>(ch));
-                (*current_index)++;
-                if (*current_index > LEN_LINE_FIRST - 1 + *current_offset_field) {
-                    (*current_offset_field)++;
+                if (is_input_field(index_field)) {
+                    insert_char_from_input_field(*current_buffer, current_index, current_offset_field, ch);
                 }
                 break;
             }
         }
-        display_buffer_on_form(_form, *current_buffer, current_index, *current_offset_field);
+        if (is_input_field(index_field)) {
+            display_buffer_on_form(_form, *current_buffer, current_index, *current_offset_field);
+        }
         wrefresh(_win);
     }
 }
@@ -374,5 +372,59 @@ void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_
     }
     for (size_t i = 0; i < *_ind - _offset; i++) {
         form_driver(_form, REQ_RIGHT_CHAR);
+    }
+}
+
+bool is_input_field(size_t _index) {
+    if (_index == 0 || _index == 1) {
+        return true;
+    }
+    return false;
+}
+
+void delete_char_from_input_field(std::string& _current_buffer, size_t* _current_index, int* _offset_field) {
+    if (!_current_buffer.empty() && *_current_index != 0) {
+        _current_buffer.erase((*_current_index) - 1, 1);
+        (*_current_index)--;
+    }
+    if (*_offset_field != 0) {
+        (*_offset_field)--;
+    }
+}
+
+void insert_char_from_input_field(std::string& _current_buffer, size_t* _current_index, int* _current_offset_field, int ch) {
+    _current_buffer.insert(_current_buffer.begin() + static_cast<long>(*_current_index), static_cast<char>(ch));
+    (*_current_index)++;
+    if (*_current_index > LEN_LINE_FIRST - 1 + *_current_offset_field) {
+        (*_current_offset_field)++;
+    }
+}
+
+void init_colors() {
+    init_pair(1, COLOR_CYAN, COLOR_BLACK);
+    init_pair(2, COLOR_RED, COLOR_BLACK);
+    init_pair(3, COLOR_MAGENTA, COLOR_BLACK);
+    init_pair(4, COLOR_WHITE, COLOR_BLUE);
+    init_pair(5, COLOR_RED, COLOR_BLUE);
+    init_pair(6, COLOR_WHITE, COLOR_CYAN);
+    init_pair(7, COLOR_WHITE, COLOR_BLUE);
+    init_pair(8, COLOR_RED, COLOR_BLUE);
+}
+
+void move_cursor_left_from_input_field(size_t* _current_index, int* _current_offset_field) {
+    if (*_current_offset_field == *_current_index && *_current_index != 0) {
+        (*_current_offset_field)--;
+    }
+    if (*_current_index != 0) {
+        (*_current_index)--;
+    }
+}
+
+void move_cursor_right_from_input_field(size_t _len, size_t* _current_index, int* _current_offset_field) {
+    if (*_current_index < _len) {
+        (*_current_index)++;
+    }
+    if (*_current_index > LEN_LINE_FIRST - 1 + *_current_offset_field) {
+        (*_current_offset_field)++;
     }
 }
