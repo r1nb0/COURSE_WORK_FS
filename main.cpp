@@ -56,7 +56,19 @@ int main() {
                 break;
             }
             case KEY_F(3) : {
-                create_functional_panel();
+                functional_symlink_hardlink_create_panel(HEADER_CREATE_SYMLINK);
+                break;
+            }
+            case KEY_F(4) : {
+                functional_symlink_hardlink_create_panel(HEADER_CREATE_HARDLINK);
+                break;
+            }
+            case KEY_F(5) : {
+                functional_dir_file_panel(HEADER_CREATE_DIR, DESCRIPTION_DIRECTORY);
+                break;
+            }
+            case KEY_F(6) : {
+                functional_dir_file_panel(HEADER_CREATE_FILE, DESCRIPTION_FILE);
                 break;
             }
             case '\t' : {

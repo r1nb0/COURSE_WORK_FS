@@ -240,15 +240,15 @@ info::info(std::string_view _name_content,
     this->size_content = _current_ind;
 }
 
-void create_functional_panel() {
-    int height = 10;
-    int weight = 60;
-    WINDOW* win = newwin(height, weight, (LINES - height) / 2, (COLS - weight) / 2);
+WINDOW* create_functional_panel(const std::string& _header) {
+    WINDOW *win = newwin(HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL,
+                         (LINES - HEIGHT_FUNCTIONAL_PANEL) / 2,
+                         (COLS - WEIGHT_FUNCTIONAL_PANEL) / 2);
     box(win, 0, 0);
     wbkgd(win, COLOR_PAIR(4));
     wattron(win, COLOR_PAIR(5));
     wattron(win, A_BOLD);
-    mvwprintw(win, 0, (weight - static_cast<int>(strlen(HEADER_CREATE_DIR))) / 2, "%s", HEADER_CREATE_DIR);
+    mvwprintw(win, 0, (WEIGHT_FUNCTIONAL_PANEL - static_cast<int>(_header.length())) / 2, "%s", _header.c_str());
     wattroff(win, A_BOLD);
     wattroff(win, COLOR_PAIR(5));
 
@@ -256,14 +256,17 @@ void create_functional_panel() {
     wrefresh(win);
 
     curs_set(1);
+    return win;
+}
 
+void functional_symlink_hardlink_create_panel(const std::string &_header) {
+    WINDOW* win = create_functional_panel(_header);
     FIELD *fields[SIZE_FIELD_BUFFER_1];
-    fields[0] = new_field(1, LEN_LINE_FIRST, 1, 15, 0, 0);
-    fields[1] = new_field(1, LEN_LINE_FIRST, 3, 15, 0, 0);
-    fields[2] = new_field(1, static_cast<int>(strlen(OK_BUTTON)), 5, 20, 0, 0);
-    fields[3] = new_field(1, static_cast<int>(strlen(NO_BUTTON)), 5, 34, 0, 0);
+    fields[0] = new_field(1, LEN_LINE_FIRST, 1, 11, 0, 0);
+    fields[1] = new_field(1, LEN_LINE_FIRST, 3, 11, 0, 0);
+    fields[2] = new_field(1, static_cast<int>(strlen(OK_BUTTON)), 5, 17, 0, 0);
+    fields[3] = new_field(1, static_cast<int>(strlen(NO_BUTTON)), 5, 35, 0, 0);
     fields[4] = nullptr;
-
     set_field_back(fields[0], COLOR_PAIR(6) | A_BOLD);
     set_field_back(fields[1], COLOR_PAIR(6) | A_BOLD);
     set_field_back(fields[2], COLOR_PAIR(7) | A_BOLD);
@@ -273,41 +276,49 @@ void create_functional_panel() {
     FORM *my_form = new_form(fields);
     set_form_win(my_form, win);
 
-    WINDOW* subwin = derwin(win, height - 4, weight - 2, 2, 1);
+    WINDOW *subwin = derwin(win, HEIGHT_FUNCTIONAL_PANEL - 4, WEIGHT_FUNCTIONAL_PANEL - 2, 2, 1);
+
     set_form_sub(my_form, subwin);
     post_form(my_form);
 
-    wrefresh(subwin);
+    wattron(subwin, COLOR_PAIR(5));
+    wattron(subwin, A_BOLD);
+    mvwprintw(subwin, 0, 11, "%s", DESCRIPTION_LINK);
+    mvwprintw(subwin, 2, 11, "%s", DESCRIPTION_LINK_POINTER);
+    wattroff(subwin, A_BOLD);
+    wattroff(subwin, COLOR_PAIR(5));
 
+    wrefresh(subwin);
     wrefresh(win);
     pos_form_cursor(my_form);
     wrefresh(win);
 
-    navigation_from_functional_panel(win, my_form, fields);
+    navigation_symlink_hardlink_create_panel(win, my_form, fields);
 
     for (size_t i = 0; i < SIZE_FIELD_BUFFER_1 - 1; i++) {
         free_field(fields[i]);
     }
+
     free_form(my_form);
     delwin(subwin);
     delwin(win);
     curs_set(0);
 }
 
-void navigation_from_functional_panel(WINDOW* _win, FORM* _form, FIELD** _fields) {
+void navigation_symlink_hardlink_create_panel(WINDOW *_win, FORM *_form, FIELD **_fields) {
     int ch;
     std::string first_field_buffer;
     std::string second_field_buffer;
-    std::string* current_buffer = &first_field_buffer;
+    std::string *current_buffer = &first_field_buffer;
     size_t index_first_field = 0;
     size_t index_second_field = 0;
     size_t index_field = 0;
     int offset_first_field = 0;
     int offset_second_field = 0;
-    int* current_offset_field = &offset_first_field;
-    size_t* current_index = &index_first_field;
-    while((ch = getch()) != '\n' && ch != KEY_RESIZE) {
-        switch(ch) {
+    int *current_offset_field = &offset_first_field;
+    size_t *current_index = &index_first_field;
+    while ((ch = getch()) != '\n' && ch != KEY_RESIZE) {
+        switch (ch) {
             case '\t' : {
                 form_driver(_form, REQ_NEXT_FIELD);
                 index_field = field_index(current_field(_form));
@@ -333,38 +344,38 @@ void navigation_from_functional_panel(WINDOW* _win, FORM* _form, FIELD** _fields
                 break;
             }
             case KEY_LEFT : {
-                if (is_input_field(index_field)) {
+                if (is_input_field_link(index_field)) {
                     move_cursor_left_from_input_field(current_index, current_offset_field);
                 }
                 break;
             }
             case KEY_RIGHT : {
-                if (is_input_field(index_field)) {
+                if (is_input_field_link(index_field)) {
                     move_cursor_right_from_input_field(current_buffer->length(), current_index, current_offset_field);
                 }
                 break;
             }
             case KEY_BACKSPACE : {
-                if (is_input_field(index_field)) {
+                if (is_input_field_link(index_field)) {
                     delete_char_from_input_field(*current_buffer, current_index, current_offset_field);
                 }
                 break;
             }
             default: {
-                if (is_input_field(index_field)) {
+                if (is_input_field_link(index_field)) {
                     insert_char_from_input_field(*current_buffer, current_index, current_offset_field, ch);
                 }
                 break;
             }
         }
-        if (is_input_field(index_field)) {
+        if (is_input_field_link(index_field)) {
             display_buffer_on_form(_form, *current_buffer, current_index, *current_offset_field);
         }
         wrefresh(_win);
     }
 }
 
-void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_t* _ind, int _offset) {
+void display_buffer_on_form(FORM *_form, const std::string &_buffer, const size_t *_ind, int _offset) {
     if (_buffer.length() < LEN_LINE_FIRST - 1 + _offset) {
         set_field_buffer(current_field(_form), 0, _buffer.c_str());
     } else {
@@ -375,14 +386,14 @@ void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_
     }
 }
 
-bool is_input_field(size_t _index) {
+bool is_input_field_link(size_t _index) {
     if (_index == 0 || _index == 1) {
         return true;
     }
     return false;
 }
 
-void delete_char_from_input_field(std::string& _current_buffer, size_t* _current_index, int* _offset_field) {
+void delete_char_from_input_field(std::string &_current_buffer, size_t *_current_index, int *_offset_field) {
     if (!_current_buffer.empty() && *_current_index != 0) {
         _current_buffer.erase((*_current_index) - 1, 1);
         (*_current_index)--;
@@ -392,7 +403,8 @@ void delete_char_from_input_field(std::string& _current_buffer, size_t* _current
     }
 }
 
-void insert_char_from_input_field(std::string& _current_buffer, size_t* _current_index, int* _current_offset_field, int ch) {
+void
+insert_char_from_input_field(std::string &_current_buffer, size_t *_current_index, int *_current_offset_field, int ch) {
     _current_buffer.insert(_current_buffer.begin() + static_cast<long>(*_current_index), static_cast<char>(ch));
     (*_current_index)++;
     if (*_current_index > LEN_LINE_FIRST - 1 + *_current_offset_field) {
@@ -411,7 +423,7 @@ void init_colors() {
     init_pair(8, COLOR_RED, COLOR_BLUE);
 }
 
-void move_cursor_left_from_input_field(size_t* _current_index, int* _current_offset_field) {
+void move_cursor_left_from_input_field(size_t *_current_index, int *_current_offset_field) {
     if (*_current_offset_field == *_current_index && *_current_index != 0) {
         (*_current_offset_field)--;
     }
@@ -420,11 +432,117 @@ void move_cursor_left_from_input_field(size_t* _current_index, int* _current_off
     }
 }
 
-void move_cursor_right_from_input_field(size_t _len, size_t* _current_index, int* _current_offset_field) {
+void move_cursor_right_from_input_field(size_t _len, size_t *_current_index, int *_current_offset_field) {
     if (*_current_index < _len) {
         (*_current_index)++;
     }
     if (*_current_index > LEN_LINE_FIRST - 1 + *_current_offset_field) {
         (*_current_offset_field)++;
     }
+}
+
+void functional_dir_file_panel(const std::string& _header, const std::string& _description) {
+    WINDOW* win = create_functional_panel(_header);
+    FIELD* fields[SIZE_FIELD_BUFFER_2];
+    fields[0] = new_field(1, LEN_LINE_FIRST, 2, 11, 0, 0);
+    fields[1] = new_field(1, static_cast<int>(strlen(OK_BUTTON)), 4, 17, 0, 0);
+    fields[2] = new_field(1, static_cast<int>(strlen(NO_BUTTON)), 4, 35, 0, 0);
+    fields[3] = nullptr;
+    set_field_back(fields[0], COLOR_PAIR(6) | A_BOLD);
+    set_field_back(fields[1], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[2], COLOR_PAIR(7) | A_BOLD);
+    set_field_buffer(fields[1], 0, OK_BUTTON);
+    set_field_buffer(fields[2], 0, NO_BUTTON);
+
+    FORM *my_form = new_form(fields);
+    set_form_win(my_form, win);
+    WINDOW *subwin = derwin(win, HEIGHT_FUNCTIONAL_PANEL - 4, WEIGHT_FUNCTIONAL_PANEL - 2, 2, 1);
+    set_form_sub(my_form, subwin);
+    post_form(my_form);
+
+    wattron(subwin, COLOR_PAIR(5));
+    wattron(subwin, A_BOLD);
+    mvwprintw(subwin, 1, 11, "%s", _description.c_str());
+    wattroff(subwin, A_BOLD);
+    wattroff(subwin, COLOR_PAIR(5));
+
+    wrefresh(subwin);
+    wrefresh(win);
+    pos_form_cursor(my_form);
+    wrefresh(win);
+
+    navigation_dir_file_panel(win, my_form, fields);
+
+    for (size_t i = 0; i < SIZE_FIELD_BUFFER_2 - 1; i++) {
+        free_field(fields[i]);
+    }
+
+    free_form(my_form);
+    delwin(subwin);
+    delwin(win);
+    curs_set(0);
+
+    delwin(win);
+}
+
+void navigation_dir_file_panel(WINDOW *_win, FORM *_form, FIELD **_fields) {
+    int ch;
+    std::string buffer;
+    size_t current_index = 0;
+    int offset = 0;
+    size_t index_field = 0;
+    while((ch = getch()) != KEY_RESIZE && ch != '\n') {
+        switch(ch) {
+            case '\t': {
+                form_driver(_form, REQ_NEXT_FIELD);
+                index_field = field_index(current_field(_form));
+                if (index_field == 0) {
+                    set_field_back(_fields[2], COLOR_PAIR(7) | A_BOLD);
+                    curs_set(1);
+                } else if (index_field == 1) {
+                    set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
+                    curs_set(0);
+                } else {
+                    set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
+                    set_field_back(_fields[1], COLOR_PAIR(7) | A_BOLD);
+                    curs_set(0);
+                }
+                break;
+            }
+            case KEY_LEFT : {
+                if (is_input_field_dir_file(index_field)) {
+                    move_cursor_left_from_input_field(&current_index, &offset);
+                }
+                break;
+            }
+            case KEY_RIGHT : {
+                if (is_input_field_dir_file(index_field)) {
+                    move_cursor_right_from_input_field(buffer.length(), &current_index, &offset);
+                }
+                break;
+            }
+            case KEY_BACKSPACE : {
+                if (is_input_field_dir_file(index_field)) {
+                    delete_char_from_input_field(buffer, &current_index, &offset);
+                }
+                break;
+            }
+            default : {
+                if (is_input_field_dir_file(index_field)) {
+                    insert_char_from_input_field(buffer, &current_index, &offset, ch);
+                }
+            }
+        }
+        if (is_input_field_dir_file(index_field)) {
+            display_buffer_on_form(_form, buffer, &current_index, offset);
+        }
+        wrefresh(_win);
+    }
+}
+
+bool is_input_field_dir_file(size_t _index) {
+    if (_index == 0) {
+        return true;
+    }
+    return false;
 }
