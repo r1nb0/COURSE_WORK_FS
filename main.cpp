@@ -56,19 +56,38 @@ int main() {
                 break;
             }
             case KEY_F(3) : {
-                functional_symlink_hardlink_create_panel(HEADER_CREATE_SYMLINK);
+                current_panel->create_symlink();
                 break;
             }
             case KEY_F(4) : {
-                functional_symlink_hardlink_create_panel(HEADER_CREATE_HARDLINK);
+                current_panel->create_hardlink();
                 break;
             }
             case KEY_F(5) : {
-                functional_dir_file_panel(HEADER_CREATE_DIR, DESCRIPTION_DIRECTORY);
+                file_panel::create_directory();
                 break;
             }
             case KEY_F(6) : {
-                functional_dir_file_panel(HEADER_CREATE_FILE, DESCRIPTION_FILE);
+                file_panel::create_file();
+                break;
+            }
+            case KEY_F(7) : {
+                current_panel->rename_content();
+                break;
+            }
+            case KEY_F(8) : {
+                current_panel == &left_panel
+                ? current_panel->copy_content(right_panel.get_current_directory())
+                : current_panel->copy_content(left_panel.get_current_directory());
+                break;
+            }
+            case KEY_F(9) : {
+                current_panel == &left_panel
+                ? current_panel->move_content(right_panel.get_current_directory())
+                : current_panel->move_content(left_panel.get_current_directory());
+                break;
+            }
+            case KEY_F(10) : {
                 break;
             }
             case '\t' : {

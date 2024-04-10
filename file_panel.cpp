@@ -230,17 +230,88 @@ void file_panel::display_box() {
     wattroff(win, COLOR_PAIR(2));
 }
 
+void file_panel::rename_content() {
+    std::string new_name;
+    if (content[current_ind].name_content != "/..") {
+        if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
+            functional_dir_file_panel(HEADER_RENAME, "Rename '" + content[current_ind]
+                    .name_content.substr(1) + "' to:", new_name);
+        } else {
+            functional_dir_file_panel(HEADER_RENAME, "Rename '" + content[current_ind]
+                    .name_content + "' to:", new_name);
+        }
+    }
+}
 
-info::info(std::string_view _name_content,
-           std::string_view _last_redact_content,
-           ssize_t _current_ind, CONTENT_TYPE _content_type) {
+void file_panel::create_directory() {
+    std::string name_directory;
+    functional_dir_file_panel(HEADER_CREATE_DIR, DESCRIPTION_DIRECTORY, name_directory);
+}
+
+void file_panel::create_file() {
+    std::string name_file;
+    functional_dir_file_panel(HEADER_CREATE_FILE, DESCRIPTION_FILE, name_file);
+}
+
+void file_panel::create_symlink() {
+    std::string linkname;
+    functional_symlink_hardlink_create_panel(HEADER_CREATE_HARDLINK, linkname, content[current_ind]
+            .name_content);
+}
+
+void file_panel::create_hardlink() {
+    std::string linkname;
+    functional_symlink_hardlink_create_panel(HEADER_CREATE_SYMLINK, linkname, content[current_ind]
+            .name_content);
+}
+
+void file_panel::copy_content(std::string other_panel_path) {
+    if (content[current_ind].name_content != "/..") {
+        if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
+            functional_dir_file_panel(HEADER_COPY, "Copy '" + content[current_ind]
+                    .name_content.substr(1) + "' to::", other_panel_path);
+        } else {
+            if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
+                functional_dir_file_panel(HEADER_COPY, "Copy '" + content[current_ind]
+                        .name_content + "' to::", other_panel_path);
+            }
+        }
+    }
+}
+
+void file_panel::move_content(std::string other_panel_path) {
+    if (content[current_ind].name_content != "/..") {
+        if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
+            functional_dir_file_panel(HEADER_COPY, "Move '" + content[current_ind]
+                    .name_content.substr(1) + "' to::", other_panel_path);
+        } else {
+            if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
+                functional_dir_file_panel(HEADER_COPY, "Move '" + content[current_ind]
+                        .name_content + "' to::", other_panel_path);
+            }
+        }
+    }
+}
+
+const std::string &file_panel::get_current_directory() const {
+    return current_directory;
+}
+
+
+info::info(std::string_view
+           _name_content,
+           std::string_view
+           _last_redact_content,
+           ssize_t
+           _current_ind, CONTENT_TYPE
+           _content_type) {
     this->content_type = _content_type;
     this->name_content = _name_content;
     this->last_redact_content = _last_redact_content;
     this->size_content = _current_ind;
 }
 
-WINDOW* create_functional_panel(const std::string& _header) {
+WINDOW *create_functional_panel(const std::string &_header) {
     WINDOW *win = newwin(HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL,
                          (LINES - HEIGHT_FUNCTIONAL_PANEL) / 2,
                          (COLS - WEIGHT_FUNCTIONAL_PANEL) / 2);
@@ -259,8 +330,11 @@ WINDOW* create_functional_panel(const std::string& _header) {
     return win;
 }
 
-void functional_symlink_hardlink_create_panel(const std::string &_header) {
-    WINDOW* win = create_functional_panel(_header);
+void
+functional_symlink_hardlink_create_panel(const std::string &_header,
+                                         std::string &_namelink,
+                                         std::string &_pointer) {
+    WINDOW *win = create_functional_panel(_header);
     FIELD *fields[SIZE_FIELD_BUFFER_1];
     fields[0] = new_field(1, LEN_LINE_FIRST, 1, 11, 0, 0);
     fields[1] = new_field(1, LEN_LINE_FIRST, 3, 11, 0, 0);
@@ -293,7 +367,7 @@ void functional_symlink_hardlink_create_panel(const std::string &_header) {
     pos_form_cursor(my_form);
     wrefresh(win);
 
-    navigation_symlink_hardlink_create_panel(win, my_form, fields);
+    navigation_symlink_hardlink_create_panel(win, my_form, fields, _namelink, _pointer);
 
     for (size_t i = 0; i < SIZE_FIELD_BUFFER_1 - 1; i++) {
         free_field(fields[i]);
@@ -305,7 +379,8 @@ void functional_symlink_hardlink_create_panel(const std::string &_header) {
     curs_set(0);
 }
 
-void navigation_symlink_hardlink_create_panel(WINDOW *_win, FORM *_form, FIELD **_fields) {
+void navigation_symlink_hardlink_create_panel(WINDOW *_win, FORM *_form, FIELD **_fields, std::string &_namelink,
+                                              std::string &_pointer) {
     int ch;
     std::string first_field_buffer;
     std::string second_field_buffer;
@@ -351,31 +426,36 @@ void navigation_symlink_hardlink_create_panel(WINDOW *_win, FORM *_form, FIELD *
             }
             case KEY_RIGHT : {
                 if (is_input_field_link(index_field)) {
-                    move_cursor_right_from_input_field(current_buffer->length(), current_index, current_offset_field);
+                    move_cursor_right_from_input_field(current_buffer->length(),
+                                                       current_index, current_offset_field);
                 }
                 break;
             }
             case KEY_BACKSPACE : {
                 if (is_input_field_link(index_field)) {
-                    delete_char_from_input_field(*current_buffer, current_index, current_offset_field);
+                    delete_char_from_input_field(*current_buffer, current_index,
+                                                 current_offset_field);
                 }
                 break;
             }
             default: {
                 if (is_input_field_link(index_field)) {
-                    insert_char_from_input_field(*current_buffer, current_index, current_offset_field, ch);
+                    insert_char_from_input_field(*current_buffer, current_index,
+                                                 current_offset_field, ch);
                 }
                 break;
             }
         }
         if (is_input_field_link(index_field)) {
-            display_buffer_on_form(_form, *current_buffer, current_index, *current_offset_field);
+            display_buffer_on_form(_form, *current_buffer, current_index,
+                                   *current_offset_field);
         }
         wrefresh(_win);
     }
 }
 
-void display_buffer_on_form(FORM *_form, const std::string &_buffer, const size_t *_ind, int _offset) {
+void display_buffer_on_form(FORM *_form, const std::string &_buffer,
+                            const size_t *_ind, int _offset) {
     if (_buffer.length() < LEN_LINE_FIRST - 1 + _offset) {
         set_field_buffer(current_field(_form), 0, _buffer.c_str());
     } else {
@@ -393,7 +473,9 @@ bool is_input_field_link(size_t _index) {
     return false;
 }
 
-void delete_char_from_input_field(std::string &_current_buffer, size_t *_current_index, int *_offset_field) {
+void delete_char_from_input_field(std::string &_current_buffer,
+                                  size_t *_current_index,
+                                  int *_offset_field) {
     if (!_current_buffer.empty() && *_current_index != 0) {
         _current_buffer.erase((*_current_index) - 1, 1);
         (*_current_index)--;
@@ -404,7 +486,10 @@ void delete_char_from_input_field(std::string &_current_buffer, size_t *_current
 }
 
 void
-insert_char_from_input_field(std::string &_current_buffer, size_t *_current_index, int *_current_offset_field, int ch) {
+insert_char_from_input_field(std::string &_current_buffer,
+                             size_t *_current_index,
+                             int *_current_offset_field,
+                             int ch) {
     _current_buffer.insert(_current_buffer.begin() + static_cast<long>(*_current_index), static_cast<char>(ch));
     (*_current_index)++;
     if (*_current_index > LEN_LINE_FIRST - 1 + *_current_offset_field) {
@@ -441,9 +526,9 @@ void move_cursor_right_from_input_field(size_t _len, size_t *_current_index, int
     }
 }
 
-void functional_dir_file_panel(const std::string& _header, const std::string& _description) {
-    WINDOW* win = create_functional_panel(_header);
-    FIELD* fields[SIZE_FIELD_BUFFER_2];
+void functional_dir_file_panel(const std::string &_header, const std::string &_description, std::string &_result) {
+    WINDOW *win = create_functional_panel(_header);
+    FIELD *fields[SIZE_FIELD_BUFFER_2];
     fields[0] = new_field(1, LEN_LINE_FIRST, 2, 11, 0, 0);
     fields[1] = new_field(1, static_cast<int>(strlen(OK_BUTTON)), 4, 17, 0, 0);
     fields[2] = new_field(1, static_cast<int>(strlen(NO_BUTTON)), 4, 35, 0, 0);
@@ -471,7 +556,7 @@ void functional_dir_file_panel(const std::string& _header, const std::string& _d
     pos_form_cursor(my_form);
     wrefresh(win);
 
-    navigation_dir_file_panel(win, my_form, fields);
+    navigation_dir_file_panel(win, my_form, fields, _result);
 
     for (size_t i = 0; i < SIZE_FIELD_BUFFER_2 - 1; i++) {
         free_field(fields[i]);
@@ -485,14 +570,14 @@ void functional_dir_file_panel(const std::string& _header, const std::string& _d
     delwin(win);
 }
 
-void navigation_dir_file_panel(WINDOW *_win, FORM *_form, FIELD **_fields) {
+void navigation_dir_file_panel(WINDOW *_win, FORM *_form, FIELD **_fields, std::string &_result) {
     int ch;
     std::string buffer;
     size_t current_index = 0;
     int offset = 0;
     size_t index_field = 0;
-    while((ch = getch()) != KEY_RESIZE && ch != '\n') {
-        switch(ch) {
+    while ((ch = getch()) != KEY_RESIZE && ch != '\n') {
+        switch (ch) {
             case '\t': {
                 form_driver(_form, REQ_NEXT_FIELD);
                 index_field = field_index(current_field(_form));
