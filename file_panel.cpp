@@ -2,6 +2,9 @@
 #include "file_panel.h"
 
 void file_panel::read_current_dir() {
+    if (!content.empty()) {
+        content.clear();
+    }
     struct stat st{};
     struct dirent *dir;
     DIR *d = opendir(this->current_directory.c_str());
@@ -23,7 +26,23 @@ void file_panel::read_current_dir() {
             buffer.insert(0, 1, '/');
             content_type = CONTENT_TYPE::IS_DIR;
         } else if ((st.st_mode & S_IFMT) == S_IFLNK) {
-            content_type = CONTENT_TYPE::IS_LNK;
+            bool flag_dir = false;
+            char target_path[PATH_MAX];
+            ssize_t len = readlink(full_path.c_str(), target_path, sizeof(target_path));
+            if (len != -1) {
+                target_path[len] = '\0';
+                lstat(target_path, &st);
+                if ((st.st_mode & S_IFMT) == S_IFDIR) {
+                    content_type = CONTENT_TYPE::IS_LNK_TO_REG;
+                    buffer.insert(0, 1, '~');
+                    flag_dir = true;
+                } else {
+                    buffer.insert(0, 1, '@');
+                }
+            }
+            if (!flag_dir) {
+                content_type = CONTENT_TYPE::IS_LNK;
+            }
         } else if ((st.st_mode & S_IFMT) == S_IFREG) {
             content_type = CONTENT_TYPE::IS_REG;
         }
@@ -77,7 +96,7 @@ void file_panel::display_content() {
         }
         mvwprintw(win, static_cast<int>(ind_offset), 1, "%*s", (COLS / 2) - 2, " ");
 
-        if (content[i].content_type == CONTENT_TYPE::IS_DIR
+        if ((content[i].content_type == CONTENT_TYPE::IS_DIR || content[i].content_type == CONTENT_TYPE::IS_LNK_TO_REG)
             && ((current_ind != ind_offset - 2 + start_index) || !active_panel)) {
             wattron(win, COLOR_PAIR(3));
         }
@@ -167,10 +186,9 @@ void file_panel::switch_directory(const std::string &_direction) {
     if (d == nullptr) {
         return;
     }
-    current_directory = new_current_directory;
     start_index = 0;
     current_ind = 0;
-    content.clear();
+    current_directory = new_current_directory;
     read_current_dir();
 }
 
@@ -231,50 +249,104 @@ void file_panel::display_box() {
 }
 
 void file_panel::rename_content() {
-    std::string new_name;
-    if (content[current_ind].name_content != "/..") {
+    std::string new_name = content[current_ind].name_content;
+    if (new_name != "/..") {
         if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
-            functional_dir_file_panel(HEADER_RENAME, "Rename '" + content[current_ind]
-                    .name_content.substr(1) + "' to:", new_name);
+            new_name.erase(0, 1);
+            functional_create_redact_panel(HEADER_RENAME, "Rename '"
+                                                          + new_name.substr(1) + "' to:", new_name);
         } else {
-            functional_dir_file_panel(HEADER_RENAME, "Rename '" + content[current_ind]
-                    .name_content + "' to:", new_name);
+            functional_create_redact_panel(HEADER_RENAME, "Rename '"
+                                                          + new_name + "' to:", new_name);
         }
     }
 }
 
-void file_panel::create_directory() {
+void file_panel::create_directory(file_panel& _other_panel) {
     std::string name_directory;
-    functional_dir_file_panel(HEADER_CREATE_DIR, DESCRIPTION_DIRECTORY, name_directory);
+    bool entry_flag = functional_create_redact_panel(HEADER_CREATE_DIR,
+                                                     DESCRIPTION_DIRECTORY,
+                                                     name_directory);
+    if (entry_flag) {
+        std::filesystem::path dirPath(current_directory);
+        if (exists(dirPath)) {
+            if (!exists(dirPath / name_directory)) {
+                std::filesystem::create_directory(dirPath / name_directory);
+                if (_other_panel.current_directory == this->current_directory) {
+                    _other_panel.read_current_dir();
+                }
+                read_current_dir();
+            }
+        }
+    }
 }
 
-void file_panel::create_file() {
+void file_panel::create_file(file_panel& _other_panel) {
     std::string name_file;
-    functional_dir_file_panel(HEADER_CREATE_FILE, DESCRIPTION_FILE, name_file);
+    bool entry_flag = functional_create_redact_panel(HEADER_CREATE_FILE,
+                                                     DESCRIPTION_FILE,
+                                                     name_file);
+    if (entry_flag) {
+        std::filesystem::path dirPath(current_directory);
+        if (exists(dirPath)) {
+            if (!exists(dirPath / name_file)) {
+                std::ofstream newFile(dirPath / name_file);
+                newFile.close();
+                if (_other_panel.current_directory == this->current_directory) {
+                    _other_panel.read_current_dir();
+                }
+                read_current_dir();
+            }
+        }
+    }
+
 }
 
-void file_panel::create_symlink() {
-    std::string linkname;
-    functional_symlink_hardlink_create_panel(HEADER_CREATE_HARDLINK, linkname, content[current_ind]
-            .name_content);
+void file_panel::create_symlink(file_panel& _other_panel) {
+    std::string namelink;
+    bool entry_flag;
+    std::string pointing_to = _other_panel.get_content()[_other_panel.get_current_ind()].name_content;
+    if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
+        pointing_to.erase(0, 1);
+        entry_flag = functional_symlink_hardlink_create_panel(HEADER_CREATE_SYMLINK, namelink, pointing_to);
+    } else {
+        entry_flag = functional_symlink_hardlink_create_panel(HEADER_CREATE_HARDLINK, namelink, pointing_to);
+    }
+
+    if (entry_flag) {
+        std::filesystem::path dirPath(current_directory);
+        if (exists(dirPath)) {
+            if (!exists(dirPath / namelink) && exists(dirPath / pointing_to)) {
+                std::filesystem::create_symlink(dirPath / pointing_to, dirPath / namelink);
+                if (_other_panel.current_directory == this->current_directory) {
+                    _other_panel.read_current_dir();
+                }
+                read_current_dir();
+            }
+        }
+    }
+
 }
 
 void file_panel::create_hardlink() {
-    std::string linkname;
-    functional_symlink_hardlink_create_panel(HEADER_CREATE_SYMLINK, linkname, content[current_ind]
-            .name_content);
+    std::string namelink;
+    std::string pointing_to = content[current_ind].name_content;
+    if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
+        pointing_to.erase(0, 1);
+        functional_symlink_hardlink_create_panel(HEADER_CREATE_SYMLINK, namelink, pointing_to);
+    } else {
+        functional_symlink_hardlink_create_panel(HEADER_CREATE_SYMLINK, namelink, pointing_to);
+    }
 }
 
 void file_panel::copy_content(std::string other_panel_path) {
     if (content[current_ind].name_content != "/..") {
         if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
-            functional_dir_file_panel(HEADER_COPY, "Copy '" + content[current_ind]
+            functional_create_redact_panel(HEADER_COPY, "Copy '" + content[current_ind]
                     .name_content.substr(1) + "' to::", other_panel_path);
         } else {
-            if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
-                functional_dir_file_panel(HEADER_COPY, "Copy '" + content[current_ind]
-                        .name_content + "' to::", other_panel_path);
-            }
+            functional_create_redact_panel(HEADER_COPY, "Copy '" + content[current_ind]
+                    .name_content + "' to::", other_panel_path);
         }
     }
 }
@@ -282,13 +354,11 @@ void file_panel::copy_content(std::string other_panel_path) {
 void file_panel::move_content(std::string other_panel_path) {
     if (content[current_ind].name_content != "/..") {
         if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
-            functional_dir_file_panel(HEADER_COPY, "Move '" + content[current_ind]
+            functional_create_redact_panel(HEADER_COPY, "Move '" + content[current_ind]
                     .name_content.substr(1) + "' to::", other_panel_path);
         } else {
-            if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
-                functional_dir_file_panel(HEADER_COPY, "Move '" + content[current_ind]
-                        .name_content + "' to::", other_panel_path);
-            }
+            functional_create_redact_panel(HEADER_COPY, "Move '" + content[current_ind]
+                    .name_content + "' to::", other_panel_path);
         }
     }
 }
@@ -330,10 +400,9 @@ WINDOW *create_functional_panel(const std::string &_header) {
     return win;
 }
 
-void
-functional_symlink_hardlink_create_panel(const std::string &_header,
-                                         std::string &_namelink,
-                                         std::string &_pointer) {
+bool functional_symlink_hardlink_create_panel(const std::string &_header,
+                                              std::string &_namelink,
+                                              std::string &_pointer) {
     WINDOW *win = create_functional_panel(_header);
     FIELD *fields[SIZE_FIELD_BUFFER_1];
     fields[0] = new_field(1, LEN_LINE_FIRST, 1, 11, 0, 0);
@@ -367,7 +436,7 @@ functional_symlink_hardlink_create_panel(const std::string &_header,
     pos_form_cursor(my_form);
     wrefresh(win);
 
-    navigation_symlink_hardlink_create_panel(win, my_form, fields, _namelink, _pointer);
+    bool entry_flag = navigation_symlink_hardlink_create_panel(win, my_form, fields, _namelink, _pointer);
 
     for (size_t i = 0; i < SIZE_FIELD_BUFFER_1 - 1; i++) {
         free_field(fields[i]);
@@ -377,35 +446,45 @@ functional_symlink_hardlink_create_panel(const std::string &_header,
     delwin(subwin);
     delwin(win);
     curs_set(0);
+
+    return entry_flag;
 }
 
-void navigation_symlink_hardlink_create_panel(WINDOW *_win, FORM *_form, FIELD **_fields, std::string &_namelink,
+bool navigation_symlink_hardlink_create_panel(WINDOW *_win, FORM *_form, FIELD **_fields, std::string &_namelink,
                                               std::string &_pointer) {
     int ch;
-    std::string first_field_buffer;
-    std::string second_field_buffer;
-    std::string *current_buffer = &first_field_buffer;
+    std::string *current_buffer = &_namelink;
     size_t index_first_field = 0;
-    size_t index_second_field = 0;
+    size_t index_second_field = _pointer.length();
     size_t index_field = 0;
     int offset_first_field = 0;
     int offset_second_field = 0;
     int *current_offset_field = &offset_first_field;
     size_t *current_index = &index_first_field;
-    while ((ch = getch()) != '\n' && ch != KEY_RESIZE) {
-        switch (ch) {
+
+    if (_pointer.length() > LEN_LINE_FIRST - 1) {
+        offset_second_field = static_cast<int>(index_second_field) - LEN_LINE_FIRST + 1;
+    }
+    set_current_field(_form, _fields[1]);
+    display_buffer_on_form(_form, _pointer, &index_second_field, offset_second_field);
+    set_current_field(_form, _fields[0]);
+    wrefresh(_win);
+
+
+    while (true) {
+        switch (ch = getch()) {
             case '\t' : {
                 form_driver(_form, REQ_NEXT_FIELD);
                 index_field = field_index(current_field(_form));
                 if (index_field == 0) {
                     current_index = &index_first_field;
-                    current_buffer = &first_field_buffer;
+                    current_buffer = &_namelink;
                     current_offset_field = &offset_first_field;
                     set_field_back(_fields[3], COLOR_PAIR(7) | A_BOLD);
                     curs_set(1);
                 } else if (index_field == 1) {
                     current_index = &index_second_field;
-                    current_buffer = &second_field_buffer;
+                    current_buffer = &_pointer;
                     current_offset_field = &offset_second_field;
                     curs_set(1);
                 } else if (index_field == 2) {
@@ -417,6 +496,16 @@ void navigation_symlink_hardlink_create_panel(WINDOW *_win, FORM *_form, FIELD *
                     curs_set(0);
                 }
                 break;
+            }
+            case KEY_RESIZE : {
+                return false;
+            }
+            case '\n' : {
+                if (index_field == 2) {
+                    return true;
+                } else {
+                    return false;
+                }
             }
             case KEY_LEFT : {
                 if (is_input_field_link(index_field)) {
@@ -485,8 +574,7 @@ void delete_char_from_input_field(std::string &_current_buffer,
     }
 }
 
-void
-insert_char_from_input_field(std::string &_current_buffer,
+void insert_char_from_input_field(std::string &_current_buffer,
                              size_t *_current_index,
                              int *_current_offset_field,
                              int ch) {
@@ -526,7 +614,9 @@ void move_cursor_right_from_input_field(size_t _len, size_t *_current_index, int
     }
 }
 
-void functional_dir_file_panel(const std::string &_header, const std::string &_description, std::string &_result) {
+bool functional_create_redact_panel(const std::string &_header,
+                                    const std::string &_description,
+                                    std::string &_result) {
     WINDOW *win = create_functional_panel(_header);
     FIELD *fields[SIZE_FIELD_BUFFER_2];
     fields[0] = new_field(1, LEN_LINE_FIRST, 2, 11, 0, 0);
@@ -556,7 +646,7 @@ void functional_dir_file_panel(const std::string &_header, const std::string &_d
     pos_form_cursor(my_form);
     wrefresh(win);
 
-    navigation_dir_file_panel(win, my_form, fields, _result);
+    bool entry_flag = navigation_functional_create_redact_panel(win, my_form, fields, _result);
 
     for (size_t i = 0; i < SIZE_FIELD_BUFFER_2 - 1; i++) {
         free_field(fields[i]);
@@ -568,16 +658,26 @@ void functional_dir_file_panel(const std::string &_header, const std::string &_d
     curs_set(0);
 
     delwin(win);
+    return entry_flag;
 }
 
-void navigation_dir_file_panel(WINDOW *_win, FORM *_form, FIELD **_fields, std::string &_result) {
+bool navigation_functional_create_redact_panel(WINDOW *_win, FORM *_form,
+                                               FIELD **_fields,
+                                               std::string &_result) {
     int ch;
-    std::string buffer;
     size_t current_index = 0;
     int offset = 0;
     size_t index_field = 0;
-    while ((ch = getch()) != KEY_RESIZE && ch != '\n') {
-        switch (ch) {
+    if (!_result.empty()) {
+        if (_result.length() > LEN_LINE_FIRST - 1) {
+            offset = static_cast<int>(_result.length()) - LEN_LINE_FIRST + 1;
+        }
+        current_index = _result.length();
+        display_buffer_on_form(_form, _result, &current_index, offset);
+        wrefresh(_win);
+    }
+    while (true) {
+        switch (ch = getch()) {
             case '\t': {
                 form_driver(_form, REQ_NEXT_FIELD);
                 index_field = field_index(current_field(_form));
@@ -594,6 +694,16 @@ void navigation_dir_file_panel(WINDOW *_win, FORM *_form, FIELD **_fields, std::
                 }
                 break;
             }
+            case KEY_RESIZE : {
+                return false;
+            }
+            case '\n' : {
+                if (index_field == 1) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
             case KEY_LEFT : {
                 if (is_input_field_dir_file(index_field)) {
                     move_cursor_left_from_input_field(&current_index, &offset);
@@ -602,24 +712,24 @@ void navigation_dir_file_panel(WINDOW *_win, FORM *_form, FIELD **_fields, std::
             }
             case KEY_RIGHT : {
                 if (is_input_field_dir_file(index_field)) {
-                    move_cursor_right_from_input_field(buffer.length(), &current_index, &offset);
+                    move_cursor_right_from_input_field(_result.length(), &current_index, &offset);
                 }
                 break;
             }
             case KEY_BACKSPACE : {
                 if (is_input_field_dir_file(index_field)) {
-                    delete_char_from_input_field(buffer, &current_index, &offset);
+                    delete_char_from_input_field(_result, &current_index, &offset);
                 }
                 break;
             }
             default : {
                 if (is_input_field_dir_file(index_field)) {
-                    insert_char_from_input_field(buffer, &current_index, &offset, ch);
+                    insert_char_from_input_field(_result, &current_index, &offset, ch);
                 }
             }
         }
         if (is_input_field_dir_file(index_field)) {
-            display_buffer_on_form(_form, buffer, &current_index, offset);
+            display_buffer_on_form(_form, _result, &current_index, offset);
         }
         wrefresh(_win);
     }

@@ -56,7 +56,9 @@ int main() {
                 break;
             }
             case KEY_F(3) : {
-                current_panel->create_symlink();
+                current_panel == &left_panel
+                ? current_panel->create_symlink(right_panel)
+                : current_panel->create_symlink(left_panel);
                 break;
             }
             case KEY_F(4) : {
@@ -64,11 +66,15 @@ int main() {
                 break;
             }
             case KEY_F(5) : {
-                file_panel::create_directory();
+                current_panel == &left_panel
+                ? current_panel->create_directory(right_panel)
+                : current_panel->create_directory(left_panel);
                 break;
             }
             case KEY_F(6) : {
-                file_panel::create_file();
+                current_panel == &left_panel
+                ? current_panel->create_file(right_panel)
+                : current_panel->create_file(left_panel);
                 break;
             }
             case KEY_F(7) : {

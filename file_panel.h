@@ -8,7 +8,10 @@
 #include <dirent.h>
 #include <ctime>
 #include <algorithm>
+#include <unistd.h>
 #include <form.h>
+#include <filesystem>
+#include <fstream>
 
 #define DATE_LEN 16
 #define LEN_LINE_FIRST 36
@@ -37,8 +40,9 @@
 
 enum class CONTENT_TYPE {
     IS_DIR = 0,
-    IS_LNK = 1,
-    IS_REG = 2,
+    IS_LNK_TO_REG = 1,
+    IS_LNK = 2,
+    IS_REG = 3,
 };
 
 struct info {
@@ -81,10 +85,10 @@ public :
     void refresh_panels();
     void resize_panel(size_t _rows, size_t _cols, size_t _x, size_t _y);
     void display_content();
-    void create_symlink();
+    void create_symlink(file_panel& _other_panel);
     void create_hardlink();
-    static void create_file();
-    static void create_directory();
+    void create_file(file_panel& _other_panel);
+    void create_directory(file_panel& _other_panel);
     void copy_content(std::string other_panel_path);
     void move_content(std::string other_panel_path);
     void rename_content();
@@ -99,10 +103,10 @@ void insert_char_from_input_field(std::string& _current_buffer, size_t* _current
 void delete_char_from_input_field(std::string& _current_buffer, size_t* _current_index, int* _offset_field);
 bool is_input_field_link(size_t _index);
 bool is_input_field_dir_file(size_t _index);
-void functional_symlink_hardlink_create_panel(const std::string& _header, std::string& _namelink, std::string& _pointer);
-void functional_dir_file_panel(const std::string& _header, const std::string& _description, std::string& _result);
-void navigation_dir_file_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _result);
-void navigation_symlink_hardlink_create_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _namelink, std::string& _pointer);
+bool functional_symlink_hardlink_create_panel(const std::string& _header, std::string& _namelink, std::string& _pointer);
+bool functional_create_redact_panel(const std::string& _header, const std::string& _description, std::string& _result);
+bool navigation_functional_create_redact_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _result);
+bool navigation_symlink_hardlink_create_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _namelink, std::string& _pointer);
 void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_t* _ind, int _offset);
 
 
