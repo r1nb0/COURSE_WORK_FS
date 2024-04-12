@@ -23,7 +23,6 @@ void file_panel::read_current_dir() {
         std::strftime(date, sizeof(date), "%D %H:%M", std::gmtime(&st.st_mtim.tv_sec));
         CONTENT_TYPE content_type;
         if ((st.st_mode & S_IFMT) == S_IFDIR) {
-            buffer.insert(0, 1, '/');
             content_type = CONTENT_TYPE::IS_DIR;
         } else if ((st.st_mode & S_IFMT) == S_IFLNK) {
             bool flag_dir = false;
@@ -34,10 +33,7 @@ void file_panel::read_current_dir() {
                 lstat(target_path, &st);
                 if ((st.st_mode & S_IFMT) == S_IFDIR) {
                     content_type = CONTENT_TYPE::IS_LNK_TO_REG;
-                    buffer.insert(0, 1, '~');
                     flag_dir = true;
-                } else {
-                    buffer.insert(0, 1, '@');
                 }
             }
             if (!flag_dir) {
@@ -91,6 +87,14 @@ void file_panel::display_content() {
     display_current_dir();
     size_t ind_offset = 2;
     for (size_t i = this->start_index; i < content.size() && i < LINES - 4 + this->start_index; i++) {
+        if (active_panel) {
+            attron(A_BOLD | COLOR_PAIR(10));
+            mvprintw(LINES - 1, 0, "%*s", (COLS - 1), " ");
+            mvprintw(LINES - 1, 0, "%s%zu%s%zu%s%s", "File:     ",
+                     current_ind + 1, " of ", content.size(), "     Path: ",
+                     (current_directory +  "/" + content[current_ind].name_content).c_str());
+            attroff(A_BOLD | COLOR_PAIR(10));
+        }
         if (i == current_ind && active_panel) {
             wattron(win, A_REVERSE);
         }
@@ -100,13 +104,14 @@ void file_panel::display_content() {
             && ((current_ind != ind_offset - 2 + start_index) || !active_panel)) {
             wattron(win, COLOR_PAIR(3));
         }
-
+        std::string output_string = content[i].name_content;
+        convert_to_output(output_string, content[i].content_type);
         size_t len_line = COLS / 2 - DATE_LEN - MAX_SIZE_LEN - 1;
-        if (len_line > content[i].name_content.length()) {
-            mvwprintw(win, static_cast<int>(ind_offset), 1, "%s", content[i].name_content.c_str());
+        if (len_line > output_string.length()) {
+            mvwprintw(win, static_cast<int>(ind_offset), 1, "%s", output_string.c_str());
         } else {
             mvwprintw(win, static_cast<int>(ind_offset), 1, "%s",
-                      content[i].name_content.substr(0, len_line).c_str());
+                      output_string.substr(0, len_line).c_str());
         }
 
         wattroff(win, COLOR_PAIR(3));
@@ -168,7 +173,7 @@ void file_panel::display_headers() {
 void file_panel::switch_directory(const std::string &_direction) {
     DIR *d;
     std::string new_current_directory;
-    if (_direction == "/..") {
+    if (_direction == "..") {
         if (current_directory == "/")
             return;
         new_current_directory = current_directory.substr(0, current_directory.find_last_of('/'));
@@ -177,10 +182,7 @@ void file_panel::switch_directory(const std::string &_direction) {
         }
         d = opendir(new_current_directory.c_str());
     } else {
-        if (current_directory == "/") {
-            current_directory.pop_back();
-        }
-        new_current_directory = current_directory + _direction;
+        new_current_directory = current_directory + "/" + _direction;
         d = opendir(new_current_directory.c_str());
     }
     if (d == nullptr) {
@@ -251,20 +253,14 @@ void file_panel::display_box() {
 void file_panel::rename_content() {
     std::string new_name = content[current_ind].name_content;
     if (new_name != "/..") {
-        if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
-            new_name.erase(0, 1);
-            functional_create_redact_panel(HEADER_RENAME, "Rename '"
-                                                          + new_name.substr(1) + "' to:", new_name);
-        } else {
-            functional_create_redact_panel(HEADER_RENAME, "Rename '"
-                                                          + new_name + "' to:", new_name);
-        }
+        create_redact_other_func_panel(HEADER_RENAME, "Rename '"
+                                                      + new_name + "' to:", new_name);
     }
 }
 
-void file_panel::create_directory(file_panel& _other_panel) {
+void file_panel::create_directory(file_panel &_other_panel) {
     std::string name_directory;
-    bool entry_flag = functional_create_redact_panel(HEADER_CREATE_DIR,
+    bool entry_flag = create_redact_other_func_panel(HEADER_CREATE_DIR,
                                                      DESCRIPTION_DIRECTORY,
                                                      name_directory);
     if (entry_flag) {
@@ -276,14 +272,19 @@ void file_panel::create_directory(file_panel& _other_panel) {
                     _other_panel.read_current_dir();
                 }
                 read_current_dir();
+            } else {
+                create_error_panel(" Directory error ",
+                                   "Directory with name '"
+                                   + name_directory
+                                   + "' is already exists.");
             }
         }
     }
 }
 
-void file_panel::create_file(file_panel& _other_panel) {
+void file_panel::create_file(file_panel &_other_panel) {
     std::string name_file;
-    bool entry_flag = functional_create_redact_panel(HEADER_CREATE_FILE,
+    bool entry_flag = create_redact_other_func_panel(HEADER_CREATE_FILE,
                                                      DESCRIPTION_FILE,
                                                      name_file);
     if (entry_flag) {
@@ -296,70 +297,54 @@ void file_panel::create_file(file_panel& _other_panel) {
                     _other_panel.read_current_dir();
                 }
                 read_current_dir();
+            } else {
+                create_error_panel(" File error ",
+                                   "File with name '"
+                                   + name_file
+                                   + "' is already exists.");
             }
         }
     }
 
 }
 
-void file_panel::create_symlink(file_panel& _other_panel) {
+void file_panel::create_symlink(file_panel &_other_panel) {
     std::string namelink;
-    bool entry_flag;
-    std::string pointing_to = _other_panel.get_content()[_other_panel.get_current_ind()].name_content;
-    if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
-        pointing_to.erase(0, 1);
-        entry_flag = functional_symlink_hardlink_create_panel(HEADER_CREATE_SYMLINK, namelink, pointing_to);
-    } else {
-        entry_flag = functional_symlink_hardlink_create_panel(HEADER_CREATE_HARDLINK, namelink, pointing_to);
-    }
+    std::string pointing_to = _other_panel.content[_other_panel.current_ind].name_content;
+    bool entry_flag = symlink_hardlink_func_panel(HEADER_CREATE_SYMLINK, namelink, pointing_to);
 
     if (entry_flag) {
-        std::filesystem::path dirPath(current_directory);
+        std::filesystem::path dirPath(_other_panel.current_directory);
         if (exists(dirPath)) {
             if (!exists(dirPath / namelink) && exists(dirPath / pointing_to)) {
                 std::filesystem::create_symlink(dirPath / pointing_to, dirPath / namelink);
                 if (_other_panel.current_directory == this->current_directory) {
-                    _other_panel.read_current_dir();
+                    this->read_current_dir();
                 }
-                read_current_dir();
+                _other_panel.read_current_dir();
             }
         }
     }
 
 }
 
-void file_panel::create_hardlink() {
+void file_panel::create_hardlink(file_panel& _other_panel) {
     std::string namelink;
-    std::string pointing_to = content[current_ind].name_content;
-    if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
-        pointing_to.erase(0, 1);
-        functional_symlink_hardlink_create_panel(HEADER_CREATE_SYMLINK, namelink, pointing_to);
-    } else {
-        functional_symlink_hardlink_create_panel(HEADER_CREATE_SYMLINK, namelink, pointing_to);
-    }
+    std::string pointing_to = _other_panel.content[_other_panel.current_ind].name_content;
+    bool entry_flag = symlink_hardlink_func_panel(HEADER_CREATE_HARDLINK, namelink, pointing_to);
 }
 
 void file_panel::copy_content(std::string other_panel_path) {
     if (content[current_ind].name_content != "/..") {
-        if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
-            functional_create_redact_panel(HEADER_COPY, "Copy '" + content[current_ind]
-                    .name_content.substr(1) + "' to::", other_panel_path);
-        } else {
-            functional_create_redact_panel(HEADER_COPY, "Copy '" + content[current_ind]
-                    .name_content + "' to::", other_panel_path);
-        }
+        create_redact_other_func_panel(HEADER_COPY, "Copy '" + content[current_ind]
+                .name_content + "' to::", other_panel_path);
     }
 }
 
 void file_panel::move_content(std::string other_panel_path) {
     if (content[current_ind].name_content != "/..") {
-        if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
-            functional_create_redact_panel(HEADER_COPY, "Move '" + content[current_ind]
-                    .name_content.substr(1) + "' to::", other_panel_path);
-        } else {
-            functional_create_redact_panel(HEADER_COPY, "Move '" + content[current_ind]
-                    .name_content + "' to::", other_panel_path);
-        }
+        create_redact_other_func_panel(HEADER_MOVE, "Move '" + content[current_ind]
+                .name_content + "' to::", other_panel_path);
     }
 }
 
@@ -368,13 +353,10 @@ const std::string &file_panel::get_current_directory() const {
 }
 
 
-info::info(std::string_view
-           _name_content,
-           std::string_view
-           _last_redact_content,
-           ssize_t
-           _current_ind, CONTENT_TYPE
-           _content_type) {
+info::info(std::string_view _name_content,
+           std::string_view _last_redact_content,
+           ssize_t _current_ind,
+           CONTENT_TYPE _content_type) {
     this->content_type = _content_type;
     this->name_content = _name_content;
     this->last_redact_content = _last_redact_content;
@@ -400,9 +382,9 @@ WINDOW *create_functional_panel(const std::string &_header) {
     return win;
 }
 
-bool functional_symlink_hardlink_create_panel(const std::string &_header,
-                                              std::string &_namelink,
-                                              std::string &_pointer) {
+bool symlink_hardlink_func_panel(const std::string &_header,
+                                 std::string &_namelink,
+                                 std::string &_pointer) {
     WINDOW *win = create_functional_panel(_header);
     FIELD *fields[SIZE_FIELD_BUFFER_1];
     fields[0] = new_field(1, LEN_LINE_FIRST, 1, 11, 0, 0);
@@ -450,6 +432,31 @@ bool functional_symlink_hardlink_create_panel(const std::string &_header,
     return entry_flag;
 }
 
+void create_error_panel(const std::string &_header, const std::string& _message) {
+    WINDOW *win = newwin(HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL,
+                         (LINES - HEIGHT_FUNCTIONAL_PANEL) / 2,
+                         (COLS - WEIGHT_FUNCTIONAL_PANEL) / 2);
+    box(win, 0, 0);
+    wbkgd(win, COLOR_PAIR(9));
+    wattron(win, COLOR_PAIR(9));
+    wattron(win, A_BOLD);
+    mvwprintw(win, 0, (WEIGHT_FUNCTIONAL_PANEL - static_cast<int>(_header.length())) / 2, "%s", _header.c_str());
+
+    wrefresh(win);
+
+    mvwprintw(win, HEIGHT_FUNCTIONAL_PANEL / 2 - 1,
+              (WEIGHT_FUNCTIONAL_PANEL - static_cast<int>(_message.length())) / 2,
+              "%s", _message.c_str());
+    mvwprintw(win, HEIGHT_FUNCTIONAL_PANEL - 2,
+              (WEIGHT_FUNCTIONAL_PANEL - static_cast<int>(strlen(PRESS_ANY_BUTTON))) / 2,
+              "%s", PRESS_ANY_BUTTON);
+    wrefresh(win);
+    getch();
+    wattroff(win, A_BOLD);
+    wattroff(win, COLOR_PAIR(9));
+    delwin(win);
+}
+
 bool navigation_symlink_hardlink_create_panel(WINDOW *_win, FORM *_form, FIELD **_fields, std::string &_namelink,
                                               std::string &_pointer) {
     int ch;
@@ -469,7 +476,6 @@ bool navigation_symlink_hardlink_create_panel(WINDOW *_win, FORM *_form, FIELD *
     display_buffer_on_form(_form, _pointer, &index_second_field, offset_second_field);
     set_current_field(_form, _fields[0]);
     wrefresh(_win);
-
 
     while (true) {
         switch (ch = getch()) {
@@ -575,9 +581,9 @@ void delete_char_from_input_field(std::string &_current_buffer,
 }
 
 void insert_char_from_input_field(std::string &_current_buffer,
-                             size_t *_current_index,
-                             int *_current_offset_field,
-                             int ch) {
+                                  size_t *_current_index,
+                                  int *_current_offset_field,
+                                  int ch) {
     _current_buffer.insert(_current_buffer.begin() + static_cast<long>(*_current_index), static_cast<char>(ch));
     (*_current_index)++;
     if (*_current_index > LEN_LINE_FIRST - 1 + *_current_offset_field) {
@@ -594,6 +600,8 @@ void init_colors() {
     init_pair(6, COLOR_WHITE, COLOR_CYAN);
     init_pair(7, COLOR_WHITE, COLOR_BLUE);
     init_pair(8, COLOR_RED, COLOR_BLUE);
+    init_pair(9, COLOR_WHITE, COLOR_RED);
+    init_pair(10, COLOR_YELLOW, COLOR_BLUE);
 }
 
 void move_cursor_left_from_input_field(size_t *_current_index, int *_current_offset_field) {
@@ -614,7 +622,7 @@ void move_cursor_right_from_input_field(size_t _len, size_t *_current_index, int
     }
 }
 
-bool functional_create_redact_panel(const std::string &_header,
+bool create_redact_other_func_panel(const std::string &_header,
                                     const std::string &_description,
                                     std::string &_result) {
     WINDOW *win = create_functional_panel(_header);
@@ -740,4 +748,23 @@ bool is_input_field_dir_file(size_t _index) {
         return true;
     }
     return false;
+}
+
+void convert_to_output(std::string &_name, CONTENT_TYPE _type) {
+    switch (_type) {
+        case CONTENT_TYPE::IS_DIR : {
+            _name.insert(0, 1, '/');
+            break;
+        }
+        case CONTENT_TYPE::IS_LNK : {
+            _name.insert(0, 1, '@');
+            break;
+        }
+        case CONTENT_TYPE::IS_LNK_TO_REG : {
+            _name.insert(0, 1, '~');
+            break;
+        }
+        default :
+            break;
+    }
 }

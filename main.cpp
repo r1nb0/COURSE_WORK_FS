@@ -62,7 +62,9 @@ int main() {
                 break;
             }
             case KEY_F(4) : {
-                current_panel->create_hardlink();
+                current_panel == &left_panel
+                ? current_panel->create_hardlink(right_panel)
+                : current_panel->create_hardlink(left_panel);
                 break;
             }
             case KEY_F(5) : {
