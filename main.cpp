@@ -98,6 +98,10 @@ int main() {
             case KEY_F(10) : {
                 break;
             }
+            case 'p' : {
+                current_panel->edit_permissions();
+                break;
+            }
             case '\t' : {
                 current_panel->set_active_panel(false);
                 current_panel == &left_panel ? (current_panel = &right_panel)

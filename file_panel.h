@@ -18,6 +18,7 @@
 #define MAX_SIZE_LEN 11
 #define SIZE_FIELD_BUFFER_1 5
 #define SIZE_FIELD_BUFFER_2 4
+#define SIZE_FIELD_BUFFER_3 7
 #define HEADER_NAME "Name"
 #define HEADER_SIZE "Size"
 #define HEADER_MODIFY_DATE "Modify date"
@@ -35,7 +36,8 @@
 #define DESCRIPTION_LINK_POINTER "Pointing to:"
 #define DESCRIPTION_FILE "Type file name:"
 #define DESCRIPTION_DIRECTORY "Type directory name:"
-#define PRESS_ANY_BUTTON "Press any button to continue."
+#define PRESS_ANY_BUTTON " Press any key to continue "
+#define EDIT_PERMISSIONS " Change file(s) permissions "
 #define HEIGHT_FUNCTIONAL_PANEL 10
 #define WEIGHT_FUNCTIONAL_PANEL 60
 
@@ -45,6 +47,13 @@ enum class CONTENT_TYPE {
     IS_LNK = 2,
     IS_REG = 3,
 };
+
+typedef struct char_permissions {
+    std::string owner_perm;
+    std::string group_perm;
+    std::string other_perm;
+    char recursive;
+} char_permissions;
 
 struct info {
     std::string name_content;
@@ -86,6 +95,7 @@ public :
     void refresh_panels();
     void resize_panel(size_t _rows, size_t _cols, size_t _x, size_t _y);
     void display_content();
+    void edit_permissions();
     void create_symlink(file_panel& _other_panel);
     void create_hardlink(file_panel& _other_panel);
     void create_file(file_panel& _other_panel);
@@ -96,7 +106,7 @@ public :
 };
 
 
-WINDOW* create_functional_panel(const std::string& _header);
+WINDOW* create_functional_panel(const std::string& _header, int _height, int _weight);
 void init_colors();
 void convert_to_output(std::string& _name, CONTENT_TYPE _type);
 void move_cursor_right_from_input_field(size_t len, size_t* _current_index, int* _current_offset_field);
@@ -105,11 +115,13 @@ void insert_char_from_input_field(std::string& _current_buffer, size_t* _current
 void delete_char_from_input_field(std::string& _current_buffer, size_t* _current_index, int* _offset_field);
 bool is_input_field_link(size_t _index);
 bool is_input_field_dir_file(size_t _index);
-bool symlink_hardlink_func_panel(const std::string& _header, std::string& _namelink, std::string& _pointer);
-bool create_redact_other_func_panel(const std::string& _header, const std::string& _description, std::string& _result);
+bool symlink_hardlink_func_panel(const std::string& _header, std::string& _namelink, std::string& _pointer, int height, int weight);
+bool create_redact_other_func_panel(const std::string& _header, const std::string& _description, std::string& _result, int height, int weight);
 bool navigation_functional_create_redact_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _result);
 bool navigation_symlink_hardlink_create_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _namelink, std::string& _pointer);
+bool navigation_symlink_edit_permissions(WINDOW* _win, FORM* _form, FIELD** _fields, char_permissions& _perms);
 void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_t* _ind, int _offset);
-void create_error_panel(const std::string& _header, const std::string& _message);
+void create_error_panel(const std::string& _header, const std::string& _message, int height, int weight);
+bool change_permissions_panel(const std::string& _header, const std::string& _description, int height, int weight, char_permissions& _perms);
 
 #endif //COURSE_PROJECT_FILE_PANEL_H
