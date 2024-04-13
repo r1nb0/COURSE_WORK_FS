@@ -366,7 +366,8 @@ void file_panel::edit_permissions() {
     if (content[current_ind].name_content == "..") {
         return;
     }
-    std::filesystem::path dir_path(current_directory + "/" + content[current_ind].name_content);
+    std::string path = current_directory + "/" + content[current_ind].name_content;
+    std::filesystem::path dir_path(path);
     std::filesystem::perms p = std::filesystem::status(dir_path).permissions();
     char_permissions perms;
     auto parse_arg = [=](std::string &_buffer, char op, std::filesystem::perms perms) {
@@ -384,10 +385,25 @@ void file_panel::edit_permissions() {
 
     perms.recursive = '-';
 
-    change_permissions_panel(EDIT_PERMISSIONS, "file.txt",
+    bool entry_flag = change_permissions_panel(EDIT_PERMISSIONS, "file.txt",
                              HEIGHT_FUNCTIONAL_PANEL + 1,
                              WEIGHT_FUNCTIONAL_PANEL,
                              perms);
+
+    if (entry_flag) {
+        std::filesystem::perms new_perms = std::filesystem::perms::none;
+        if (perms.owner_perm[0] == 'r') new_perms |= std::filesystem::perms::owner_read;
+        if (perms.owner_perm[1] == 'w') new_perms |= std::filesystem::perms::owner_write;
+        if (perms.owner_perm[2] == 'x') new_perms |= std::filesystem::perms::owner_exec;
+        if (perms.group_perm[0] == 'r') new_perms |= std::filesystem::perms::group_read;
+        if (perms.group_perm[1] == 'w') new_perms |= std::filesystem::perms::group_write;
+        if (perms.group_perm[2] == 'x') new_perms |= std::filesystem::perms::group_exec;
+        if (perms.other_perm[0] == 'r') new_perms |= std::filesystem::perms::others_read;
+        if (perms.other_perm[1] == 'w') new_perms |= std::filesystem::perms::others_write;
+        if (perms.other_perm[2] == 'x') new_perms |= std::filesystem::perms::others_exec;
+        std::filesystem::permissions(path, new_perms, std::filesystem::perm_options::replace);
+    }
+
 }
 
 
