@@ -86,13 +86,15 @@ int main() {
                 break;
             }
             case KEY_F(7) : {
-                current_panel->rename_content();
+                current_panel == &left_panel
+                ? current_panel->rename_content(right_panel)
+                : current_panel->rename_content(left_panel);
                 break;
             }
             case KEY_F(8) : {
                 current_panel == &left_panel
-                ? current_panel->copy_content(right_panel.get_current_directory())
-                : current_panel->copy_content(left_panel.get_current_directory());
+                ? current_panel->copy_content(right_panel)
+                : current_panel->copy_content(left_panel);
                 break;
             }
             case KEY_F(9) : {

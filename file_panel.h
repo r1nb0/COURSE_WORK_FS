@@ -112,9 +112,9 @@ public :
     void create_file(file_panel& _other_panel);
     void create_directory(file_panel& _other_panel);
     void delete_content(file_panel& _other_panel);
-    void copy_content(std::string other_panel_path);
+    void copy_content(file_panel& _other_panel);
     void move_content(std::string other_panel_path);
-    void rename_content();
+    void rename_content(file_panel& _other_panel);
 };
 
 void generate_permission_error(std::filesystem::filesystem_error& e);

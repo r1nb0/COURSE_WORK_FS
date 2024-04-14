@@ -263,12 +263,48 @@ void file_panel::display_box() {
     wattroff(win, COLOR_PAIR(2));
 }
 
-void file_panel::rename_content() {
+void file_panel::rename_content(file_panel &_other_panel) {
     std::string new_name = content[current_ind].name_content;
+    bool flag_entry;
     if (new_name != "/..") {
-        create_redact_other_func_panel(HEADER_RENAME, "Rename '"
-                                                      + new_name + "' to:", new_name,
-                                       HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL);
+        flag_entry = create_redact_other_func_panel(HEADER_RENAME, "Rename '"
+                                                                   + new_name + "' to:", new_name,
+                                                    HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL);
+        if (new_name == content[current_ind].name_content) {
+            return;
+        }
+        if (flag_entry) {
+            std::filesystem::path dir_path(current_directory);
+            if ((std::filesystem::status(dir_path).permissions() & std::filesystem::perms::owner_write) ==
+                std::filesystem::perms::none) {
+                display_content();
+                _other_panel.display_content();
+                std::string message =
+                        "Cannot rename file/dir :: '" + content[current_ind].name_content + "' to '" + new_name + "'";
+                create_error_panel(" Permission error ", message,
+                                   HEIGHT_FUNCTIONAL_PANEL - 2,
+                                   WEIGHT_FUNCTIONAL_PANEL > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
+                                   message.length() + 2);
+                return;
+            }
+            if (exists(dir_path)) {
+                if (!exists(dir_path / new_name)) {
+                    std::filesystem::rename(dir_path / content[current_ind].name_content, dir_path / new_name);
+                    read_current_dir();
+                    if (_other_panel.current_directory == current_directory) {
+                        _other_panel.read_current_dir();
+                    }
+                } else {
+                    display_content();
+                    _other_panel.display_content();
+                    std::string message = "File with name :: '" + new_name + "' is already exists.";
+                    create_error_panel(" Rename error ", message,
+                                       HEIGHT_FUNCTIONAL_PANEL - 2,
+                                       WEIGHT_FUNCTIONAL_PANEL > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
+                                       message.length() + 2);
+                }
+            }
+        }
     }
 }
 
@@ -282,9 +318,13 @@ void file_panel::create_directory(file_panel &_other_panel) {
         std::filesystem::path dir_path(current_directory);
         if ((std::filesystem::status(dir_path).permissions() & std::filesystem::perms::owner_write) ==
             std::filesystem::perms::none) {
-            create_error_panel("Permission error", "Cannot create directory : '" + name_directory + "'",
+            display_content();
+            _other_panel.display_content();
+            std::string message = "Cannot create directory :: '" + name_directory + "'";
+            create_error_panel(" Permission error ", message,
                                HEIGHT_FUNCTIONAL_PANEL - 2,
-                               WEIGHT_FUNCTIONAL_PANEL);
+                               WEIGHT_FUNCTIONAL_PANEL > message.length() ? WEIGHT_FUNCTIONAL_PANEL : message.length() +
+                                                                                                      2);
             return;
         }
         if (exists(dir_path)) {
@@ -295,11 +335,12 @@ void file_panel::create_directory(file_panel &_other_panel) {
                 }
                 read_current_dir();
             } else {
-                create_error_panel(" Directory error ",
-                                   "Directory with name '"
-                                   + name_directory
-                                   + "' is already exists.",
-                                   HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL);
+                display_content();
+                _other_panel.display_content();
+                std::string message = "File with name :: '" + name_directory + "' is already exists.";
+                create_error_panel(" Directory error ", message, HEIGHT_FUNCTIONAL_PANEL,
+                                   WEIGHT_FUNCTIONAL_PANEL > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
+                                   message.length() + 2);
             }
         }
     }
@@ -318,9 +359,12 @@ void file_panel::create_file(file_panel &_other_panel) {
             std::filesystem::perms::none) {
             display_content();
             _other_panel.display_content();
-            create_error_panel("Permission error", "Cannot create file : '" + name_file + "'",
+            std::string message = "Cannot create file :: '" + name_file + "'";
+            create_error_panel(" Permission error ", message,
                                HEIGHT_FUNCTIONAL_PANEL - 2,
-                               WEIGHT_FUNCTIONAL_PANEL);
+                               WEIGHT_FUNCTIONAL_PANEL > message.length() ? WEIGHT_FUNCTIONAL_PANEL : message.length() +
+                                                                                                      2);
+
             return;
         }
         if (exists(dir_path)) {
@@ -332,11 +376,12 @@ void file_panel::create_file(file_panel &_other_panel) {
                 }
                 read_current_dir();
             } else {
-                create_error_panel(" File error ",
-                                   "File with name '"
-                                   + name_file
-                                   + "' is already exists.",
-                                   HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL);
+                display_content();
+                _other_panel.display_content();
+                std::string message = "File with name :: '" + name_file + "' is already exists.";
+                create_error_panel(" File error ", message, HEIGHT_FUNCTIONAL_PANEL,
+                                   WEIGHT_FUNCTIONAL_PANEL > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
+                                   message.length() + 2);
             }
         }
     }
@@ -382,11 +427,26 @@ void file_panel::create_hardlink(file_panel &_other_panel) {
                                                   HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL);
 }
 
-void file_panel::copy_content(std::string other_panel_path) {
+void file_panel::copy_content(file_panel &_other_panel) {
     if (content[current_ind].name_content != "/..") {
-        create_redact_other_func_panel(HEADER_COPY, "Copy '" + content[current_ind]
-                                               .name_content + "' to::", other_panel_path,
-                                       HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL);
+        std::string path = _other_panel.current_directory;
+        bool entry_flag = create_redact_other_func_panel(HEADER_COPY, "Copy '" + content[current_ind]
+                                                                 .name_content + "' to::", _other_panel.current_directory,
+                                                         HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL);
+        if (entry_flag) {
+            std::filesystem::path copy_path_from(current_directory + "/" + content[current_ind].name_content);
+            std::filesystem::path copy_path_to(path);
+            if (exists(copy_path_to)) {
+                if (content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
+                    std::filesystem::copy(copy_path_from, copy_path_to, std::filesystem::copy_options::recursive);
+                } else if (content[current_ind].content_type == CONTENT_TYPE::IS_REG) {
+                    std::filesystem::copy_file(copy_path_from, copy_path_to);
+                } else if (content[current_ind].content_type == CONTENT_TYPE::IS_LNK
+                           || content[current_ind].content_type == CONTENT_TYPE::IS_LNK_TO_REG) {
+                    std::filesystem::copy_symlink(copy_path_from, copy_path_to);
+                }
+            }
+        }
     }
 }
 
@@ -505,7 +565,13 @@ void file_panel::delete_content(file_panel &_other_panel) {
                 }
                 display_content();
                 _other_panel.display_content();
-                if (type == REMOVE_TYPE::REMOVE_ALL || type == REMOVE_TYPE::STOP_REMOVE) {
+                if (type == REMOVE_TYPE::REMOVE_ALL) {
+                    read_current_dir();
+                    if (_other_panel.current_directory == current_directory) {
+                        _other_panel.read_current_dir();
+                    }
+                    return;
+                } else if (type == REMOVE_TYPE::STOP_REMOVE) {
                     return;
                 }
                 if (std::filesystem::is_directory(entry.path())) {
