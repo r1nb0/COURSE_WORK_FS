@@ -12,6 +12,7 @@
 #include <form.h>
 #include <filesystem>
 #include <fstream>
+#include <stack>
 
 #define DATE_LEN 16
 #define LEN_LINE_FIRST 36
@@ -32,6 +33,9 @@
 #define HEADER_DELETE " Delete file(s) "
 #define OK_BUTTON "[ OK ]"
 #define NO_BUTTON "[ NO ]"
+#define YES_BUTTON "[ YES ]"
+#define STOP_BUTTON "[ STOP ]"
+#define ALL_BUTTON "[ ALL ]"
 #define DESCRIPTION_LINK "Link name:"
 #define DESCRIPTION_LINK_POINTER "Pointing to:"
 #define DESCRIPTION_FILE "Type file name:"
@@ -46,6 +50,13 @@ enum class CONTENT_TYPE {
     IS_LNK_TO_REG = 1,
     IS_LNK = 2,
     IS_REG = 3,
+};
+
+enum class REMOVE_TYPE {
+    REMOVE_THIS = 0,
+    REMOVE_ALL = 1,
+    SKIP = 2,
+    STOP_REMOVE = 3,
 };
 
 typedef struct char_permissions {
@@ -95,17 +106,18 @@ public :
     void refresh_panels();
     void resize_panel(size_t _rows, size_t _cols, size_t _x, size_t _y);
     void display_content();
-    void edit_permissions();
+    void edit_permissions(file_panel& _other_panel);
     void create_symlink(file_panel& _other_panel);
     void create_hardlink(file_panel& _other_panel);
     void create_file(file_panel& _other_panel);
     void create_directory(file_panel& _other_panel);
+    void delete_content(file_panel& _other_panel);
     void copy_content(std::string other_panel_path);
     void move_content(std::string other_panel_path);
     void rename_content();
 };
 
-
+void generate_permission_error(std::filesystem::filesystem_error& e);
 WINDOW* create_functional_panel(const std::string& _header, int _height, int _weight);
 void init_colors();
 void convert_to_output(std::string& _name, CONTENT_TYPE _type);
@@ -120,8 +132,10 @@ bool create_redact_other_func_panel(const std::string& _header, const std::strin
 bool navigation_functional_create_redact_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _result);
 bool navigation_symlink_hardlink_create_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _namelink, std::string& _pointer);
 bool navigation_symlink_edit_permissions(WINDOW* _win, FORM* _form, FIELD** _fields, char_permissions& _perms);
+REMOVE_TYPE navigation_remove(WINDOW* _win, FORM* _form, FIELD** _fields);
 void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_t* _ind, int _offset);
 void create_error_panel(const std::string& _header, const std::string& _message, int height, int weight);
 bool change_permissions_panel(const std::string& _header, const std::string& _description, int height, int weight, char_permissions& _perms);
+REMOVE_TYPE create_remove_panel(const std::string& description, int height, int weight);
 
 #endif //COURSE_PROJECT_FILE_PANEL_H

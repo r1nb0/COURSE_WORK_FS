@@ -185,6 +185,19 @@ void file_panel::switch_directory(const std::string &_direction) {
         new_current_directory = current_directory + "/" + _direction;
         d = opendir(new_current_directory.c_str());
     }
+    std::filesystem::path check_perm(new_current_directory);
+
+    if ((std::filesystem::status(check_perm).permissions() & std::filesystem::perms::owner_read) ==
+        std::filesystem::perms::none
+        || (std::filesystem::status(check_perm).permissions() & std::filesystem::perms::owner_exec) ==
+           std::filesystem::perms::none) {
+        std::string message = "Cannot chdir to " + _direction;
+        int size = static_cast<int>(message.length());
+        create_error_panel(" Permission error ",
+                           message, 8,
+                           WEIGHT_FUNCTIONAL_PANEL > size ? WEIGHT_FUNCTIONAL_PANEL : size + 2);
+        return;
+    }
     if (d == nullptr) {
         return;
     }
@@ -267,6 +280,13 @@ void file_panel::create_directory(file_panel &_other_panel) {
                                                      WEIGHT_FUNCTIONAL_PANEL);
     if (entry_flag) {
         std::filesystem::path dir_path(current_directory);
+        if ((std::filesystem::status(dir_path).permissions() & std::filesystem::perms::owner_write) ==
+            std::filesystem::perms::none) {
+            create_error_panel("Permission error", "Cannot create directory : '" + name_directory + "'",
+                               HEIGHT_FUNCTIONAL_PANEL - 2,
+                               WEIGHT_FUNCTIONAL_PANEL);
+            return;
+        }
         if (exists(dir_path)) {
             if (!exists(dir_path / name_directory)) {
                 std::filesystem::create_directory(dir_path / name_directory);
@@ -294,6 +314,15 @@ void file_panel::create_file(file_panel &_other_panel) {
                                                      WEIGHT_FUNCTIONAL_PANEL);
     if (entry_flag) {
         std::filesystem::path dir_path(current_directory);
+        if ((std::filesystem::status(dir_path).permissions() & std::filesystem::perms::owner_write) ==
+            std::filesystem::perms::none) {
+            display_content();
+            _other_panel.display_content();
+            create_error_panel("Permission error", "Cannot create file : '" + name_file + "'",
+                               HEIGHT_FUNCTIONAL_PANEL - 2,
+                               WEIGHT_FUNCTIONAL_PANEL);
+            return;
+        }
         if (exists(dir_path)) {
             if (!exists(dir_path / name_file)) {
                 std::ofstream newFile(dir_path / name_file);
@@ -321,10 +350,21 @@ void file_panel::create_symlink(file_panel &_other_panel) {
                                                   HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL);
 
     if (entry_flag) {
-        std::filesystem::path dir_path(_other_panel.current_directory);
+        std::filesystem::path dir_path(current_directory);
+        std::filesystem::path other_panel_path(_other_panel.current_directory);
+        if ((std::filesystem::status(dir_path).permissions() & std::filesystem::perms::owner_write) ==
+            std::filesystem::perms::none) {
+            display_content();
+            _other_panel.display_content();
+            std::string message = "Cannot create symlink : '" + namelink + "' -> '" + pointing_to + "'";
+            create_error_panel("Permission error", message,
+                               HEIGHT_FUNCTIONAL_PANEL - 2,
+                               WEIGHT_FUNCTIONAL_PANEL > message.length() ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
+            return;
+        }
         if (exists(dir_path)) {
-            if (!exists(dir_path / namelink) && exists(dir_path / pointing_to)) {
-                std::filesystem::create_symlink(dir_path / pointing_to, dir_path / namelink);
+            if (!exists(dir_path / namelink) && exists(other_panel_path / pointing_to)) {
+                std::filesystem::create_symlink(other_panel_path / pointing_to, dir_path / namelink);
                 if (_other_panel.current_directory == this->current_directory) {
                     this->read_current_dir();
                 }
@@ -362,7 +402,7 @@ const std::string &file_panel::get_current_directory() const {
     return current_directory;
 }
 
-void file_panel::edit_permissions() {
+void file_panel::edit_permissions(file_panel &_other_panel) {
     if (content[current_ind].name_content == "..") {
         return;
     }
@@ -373,6 +413,7 @@ void file_panel::edit_permissions() {
     auto parse_arg = [=](std::string &_buffer, char op, std::filesystem::perms perms) {
         std::filesystem::perms::none == (perms & p) ? _buffer.push_back('-') : _buffer.push_back(op);
     };
+
     parse_arg(perms.owner_perm, 'r', std::filesystem::perms::owner_read);
     parse_arg(perms.owner_perm, 'w', std::filesystem::perms::owner_write);
     parse_arg(perms.owner_perm, 'x', std::filesystem::perms::owner_exec);
@@ -385,10 +426,10 @@ void file_panel::edit_permissions() {
 
     perms.recursive = '-';
 
-    bool entry_flag = change_permissions_panel(EDIT_PERMISSIONS, "file.txt",
-                             HEIGHT_FUNCTIONAL_PANEL + 1,
-                             WEIGHT_FUNCTIONAL_PANEL,
-                             perms);
+    bool entry_flag = change_permissions_panel(EDIT_PERMISSIONS, content[current_ind].name_content,
+                                               HEIGHT_FUNCTIONAL_PANEL + 1,
+                                               WEIGHT_FUNCTIONAL_PANEL,
+                                               perms);
 
     if (entry_flag) {
         std::filesystem::perms new_perms = std::filesystem::perms::none;
@@ -401,11 +442,107 @@ void file_panel::edit_permissions() {
         if (perms.other_perm[0] == 'r') new_perms |= std::filesystem::perms::others_read;
         if (perms.other_perm[1] == 'w') new_perms |= std::filesystem::perms::others_write;
         if (perms.other_perm[2] == 'x') new_perms |= std::filesystem::perms::others_exec;
-        std::filesystem::permissions(path, new_perms, std::filesystem::perm_options::replace);
+        try {
+            if (perms.recursive == 'X' && std::filesystem::is_directory(path)) {
+                for (auto &&entry: std::filesystem::recursive_directory_iterator(path)) {
+                    std::filesystem::permissions(entry.path(), new_perms, std::filesystem::perm_options::replace);
+                }
+            }
+            std::filesystem::permissions(path, new_perms, std::filesystem::perm_options::replace);
+        } catch (std::filesystem::filesystem_error &e) {
+            int error_ind = e.code().value();
+            if (error_ind == 13) {
+                display_content();
+                _other_panel.display_content();
+                generate_permission_error(e);
+            }
+        }
     }
 
 }
 
+void file_panel::delete_content(file_panel &_other_panel) {
+    if (content[current_ind].name_content == "..") {
+        return;
+    }
+    std::filesystem::path p(current_directory + "/" + content[current_ind].name_content);
+    REMOVE_TYPE type;
+    bool flag_permission_read = false;
+    try {
+        flag_permission_read = std::filesystem::is_empty(p);
+    } catch (std::filesystem::filesystem_error &e) {
+        int error_ind = e.code().value();
+        if (error_ind == 13) {
+            generate_permission_error(e);
+        }
+    }
+    if (is_directory(p) && !flag_permission_read) {
+        std::stack<std::filesystem::path> dir_stack;
+        dir_stack.push(p);
+        while (!dir_stack.empty()) {
+            std::filesystem::path current_path = dir_stack.top();
+            dir_stack.pop();
+
+            for (const auto &entry: std::filesystem::directory_iterator(current_path)) {
+                size_t ind = entry.path().string().find(content[current_ind].name_content);
+                std::string message = "Delete: " + entry.path().string().substr(ind);
+                type = create_remove_panel("Delete: " + message, HEIGHT_FUNCTIONAL_PANEL - 2,
+                                           WEIGHT_FUNCTIONAL_PANEL);
+
+                try {
+                    if (type == REMOVE_TYPE::REMOVE_ALL) {
+                        std::filesystem::remove_all(p);
+                    } else if (type == REMOVE_TYPE::REMOVE_THIS) {
+                        if (entry.is_directory()) {
+                            std::filesystem::remove_all(entry.path());
+                        } else std::filesystem::remove(entry.path());
+                    }
+                } catch (std::filesystem::filesystem_error &e) {
+                    int error_ind = e.code().value();
+                    if (error_ind == 13) {
+                        generate_permission_error(e);
+                    }
+                }
+                display_content();
+                _other_panel.display_content();
+                if (type == REMOVE_TYPE::REMOVE_ALL || type == REMOVE_TYPE::STOP_REMOVE) {
+                    return;
+                }
+                if (std::filesystem::is_directory(entry.path())) {
+                    dir_stack.push(entry.path());
+                }
+            }
+        }
+    } else {
+        type = create_remove_panel("Delete: " + content[current_ind].name_content, HEIGHT_FUNCTIONAL_PANEL - 2,
+                                   WEIGHT_FUNCTIONAL_PANEL);
+        if (type == REMOVE_TYPE::REMOVE_ALL || type == REMOVE_TYPE::REMOVE_THIS) {
+            try {
+                std::filesystem::remove(p);
+                read_current_dir();
+                if (_other_panel.current_directory == current_directory) {
+                    _other_panel.read_current_dir();
+                }
+            } catch (std::filesystem::filesystem_error &e) {
+                int error_ind = e.code().value();
+                if (error_ind == 13) {
+                    generate_permission_error(e);
+                }
+            }
+        }
+    }
+}
+
+
+void generate_permission_error(std::filesystem::filesystem_error &e) {
+//    size_t ind = e.path1().string().find(find_str);
+//    std::string message = func + e.path1().string().substr(ind);
+    std::string message = e.path1().string();
+    int len = static_cast<int>(message.length());
+    create_error_panel(" Permission error ", message,
+                       HEIGHT_FUNCTIONAL_PANEL - 2,
+                       WEIGHT_FUNCTIONAL_PANEL > len ? WEIGHT_FUNCTIONAL_PANEL : len + 2);
+}
 
 info::info(std::string_view _name_content,
            std::string_view _last_redact_content,
@@ -718,15 +855,97 @@ bool create_redact_other_func_panel(const std::string &_header,
     delwin(subwin);
     delwin(win);
     curs_set(0);
-
-    delwin(win);
     return entry_flag;
 }
+
+REMOVE_TYPE create_remove_panel(const std::string &description, int _height, int _weight) {
+    WINDOW *win = create_functional_panel(HEADER_DELETE, _height, _weight);
+    FIELD *fields[SIZE_FIELD_BUFFER_1];
+    curs_set(0);
+    //35
+    int center = (_weight - 35) / 2;
+    fields[0] = new_field(1, static_cast<int>(strlen(YES_BUTTON)), _height - 5, center, 0, 0);
+    fields[1] = new_field(1, static_cast<int>(strlen(ALL_BUTTON)), _height - 5, center + 9, 0, 0);
+    fields[2] = new_field(1, static_cast<int>(strlen(NO_BUTTON)), _height - 5, center + 9 + 9, 0, 0);
+    fields[3] = new_field(1, static_cast<int>(strlen(STOP_BUTTON)), _height - 5, center + 9 + 9 + 8, 0, 0);
+    fields[4] = nullptr;
+
+    set_field_back(fields[0], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[1], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[2], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[3], COLOR_PAIR(7) | A_BOLD);
+    set_field_buffer(fields[0], 0, YES_BUTTON);
+    set_field_buffer(fields[1], 0, ALL_BUTTON);
+    set_field_buffer(fields[2], 0, NO_BUTTON);
+    set_field_buffer(fields[3], 0, STOP_BUTTON);
+
+    FORM *my_form = new_form(fields);
+    set_form_win(my_form, win);
+    WINDOW *subwin = derwin(win, _height - 4, _weight - 2, 2, 1);
+    set_form_sub(my_form, subwin);
+    post_form(my_form);
+
+    wattron(win, COLOR_PAIR(5));
+    wattron(win, A_BOLD);
+    mvwprintw(win, _height / 2 - 1, (_weight - static_cast<int>(description.length())) / 2, "%s",
+              (description).c_str());
+    wattroff(win, COLOR_PAIR(5));
+    wattroff(win, COLOR_PAIR(5));
+
+    wrefresh(subwin);
+    wrefresh(win);
+    pos_form_cursor(my_form);
+    wrefresh(win);
+
+    REMOVE_TYPE flag = navigation_remove(win, my_form, fields);
+
+    for (size_t i = 0; i < SIZE_FIELD_BUFFER_1 - 1; i++) {
+        free_field(fields[i]);
+    }
+
+    free_form(my_form);
+    delwin(subwin);
+    delwin(win);
+    return flag;
+}
+
+REMOVE_TYPE navigation_remove(WINDOW *_win, FORM *_form, FIELD **_fields) {
+    int current_ind = -1;
+    while (true) {
+        switch (getch()) {
+            case '\t' : {
+                current_ind = field_index(current_field(_form));
+                if (current_ind == 0) {
+                    set_field_back(_fields[SIZE_FIELD_BUFFER_1 - 2], A_BOLD | COLOR_PAIR(7));
+                } else {
+                    set_field_back(_fields[current_ind - 1], A_BOLD | COLOR_PAIR(7));
+                }
+                set_field_back(_fields[current_ind], A_BOLD | COLOR_PAIR(8));
+                form_driver(_form, REQ_NEXT_FIELD);
+                break;
+            }
+            case KEY_RESIZE : {
+                return REMOVE_TYPE::STOP_REMOVE;
+            }
+            case '\n' : {
+                if (current_ind == 0) {
+                    return REMOVE_TYPE::REMOVE_THIS;
+                } else if (current_ind == 1) {
+                    return REMOVE_TYPE::REMOVE_ALL;
+                } else if (current_ind == 2) {
+                    return REMOVE_TYPE::SKIP;
+                } else return REMOVE_TYPE::STOP_REMOVE;
+            }
+        }
+        wrefresh(_win);
+    }
+}
+
 
 bool change_permissions_panel(const std::string &_header,
                               const std::string &_description,
                               int _height, int _weight,
-                              char_permissions& _perms) {
+                              char_permissions &_perms) {
 
     WINDOW *win = create_functional_panel(_header, _height, _weight);
     curs_set(0);
@@ -783,7 +1002,6 @@ bool change_permissions_panel(const std::string &_header,
     set_field_buffer(fields[4], 0, OK_BUTTON);
     set_field_buffer(fields[5], 0, NO_BUTTON);
 
-
     wrefresh(subwin);
     wrefresh(win);
     pos_form_cursor(my_form);
@@ -801,13 +1019,13 @@ bool change_permissions_panel(const std::string &_header,
     return entry_flag;
 }
 
-bool navigation_symlink_edit_permissions(WINDOW *_win, FORM *_form, FIELD **_fields, char_permissions& _perms) {
+bool navigation_symlink_edit_permissions(WINDOW *_win, FORM *_form, FIELD **_fields, char_permissions &_perms) {
     int current_ind = -1;
     wrefresh(_win);
 
-    auto edit_func = [&](char ch, size_t _ind){
+    auto edit_func = [&](char ch, size_t _ind) {
         if (current_ind == 0) {
-            _perms.owner_perm[_ind] == ch ?  _perms.owner_perm[_ind] = '-' :  _perms.owner_perm[_ind] = ch;
+            _perms.owner_perm[_ind] == ch ? _perms.owner_perm[_ind] = '-' : _perms.owner_perm[_ind] = ch;
             set_field_buffer(_fields[current_ind], 0, _perms.owner_perm.c_str());
         } else if (current_ind == 1) {
             _perms.group_perm[_ind] == ch ? _perms.group_perm[_ind] = '-' : _perms.group_perm[_ind] = ch;
@@ -818,17 +1036,16 @@ bool navigation_symlink_edit_permissions(WINDOW *_win, FORM *_form, FIELD **_fie
         }
     };
 
-    while(true) {
-        switch(getch()) {
+    while (true) {
+        switch (getch()) {
             case '\t' : {
                 current_ind = field_index(current_field(_form));
                 if (current_ind == 0) {
                     set_field_back(_fields[SIZE_FIELD_BUFFER_3 - 2], A_BOLD | COLOR_PAIR(7));
-                    set_field_back(_fields[current_ind], A_BOLD | COLOR_PAIR(8));
                 } else {
                     set_field_back(_fields[current_ind - 1], A_BOLD | COLOR_PAIR(7));
-                    set_field_back(_fields[current_ind], A_BOLD | COLOR_PAIR(8));
                 }
+                set_field_back(_fields[current_ind], A_BOLD | COLOR_PAIR(8));
                 form_driver(_form, REQ_NEXT_FIELD);
                 break;
             }

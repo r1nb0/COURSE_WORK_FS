@@ -55,6 +55,12 @@ int main() {
                 right_panel.display_content();
                 break;
             }
+            case KEY_F(2) : {
+                current_panel == &left_panel
+                ? current_panel->delete_content(right_panel)
+                : current_panel->delete_content(left_panel);
+                break;
+            }
             case KEY_F(3) : {
                 current_panel == &left_panel
                 ? current_panel->create_symlink(right_panel)
@@ -95,11 +101,10 @@ int main() {
                 : current_panel->move_content(left_panel.get_current_directory());
                 break;
             }
-            case KEY_F(10) : {
-                break;
-            }
             case 'p' : {
-                current_panel->edit_permissions();
+                current_panel == &left_panel
+                ? current_panel->edit_permissions(right_panel)
+                : current_panel->edit_permissions(left_panel);
                 break;
             }
             case '\t' : {
