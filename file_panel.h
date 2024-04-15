@@ -111,6 +111,7 @@ public :
     void create_file(file_panel& _other_panel);
     void create_directory(file_panel& _other_panel);
     void delete_content(file_panel& _other_panel);
+    void sequential_removing(std::filesystem::path& _p, file_panel& _other_panel);
     void copy_content(file_panel& _other_panel);
     void move_content(std::string other_panel_path);
     void rename_content(file_panel& _other_panel);

@@ -408,7 +408,11 @@ void file_panel::create_symlink(file_panel &_other_panel) {
         }
         if (exists(dir_path)) {
             if (!exists(dir_path / namelink) && exists(other_panel_path / pointing_to)) {
-                std::filesystem::create_symlink(other_panel_path / pointing_to, dir_path / namelink);
+                if (is_directory((other_panel_path / pointing_to))) {
+                    std::filesystem::create_directory_symlink(other_panel_path / pointing_to, dir_path / namelink);
+                } else {
+                    std::filesystem::create_symlink(other_panel_path / pointing_to, dir_path / namelink);
+                }
                 if (_other_panel.current_directory == this->current_directory) {
                     _other_panel.read_current_dir();
                 }
@@ -646,49 +650,35 @@ void file_panel::delete_content(file_panel &_other_panel) {
         }
     }
     if (is_directory(p) && !flag_permission_read) {
-        std::stack<std::filesystem::path> dir_stack;
-        dir_stack.push(p);
-        while (!dir_stack.empty()) {
-            std::filesystem::path current_path = dir_stack.top();
-            dir_stack.pop();
-
-            for (const auto &entry: std::filesystem::directory_iterator(current_path,
-                                                                        std::filesystem::directory_options::skip_permission_denied)) {
-                size_t ind = entry.path().string().find(content[current_ind].name_content);
-                std::string message = "Delete: " + entry.path().string().substr(ind);
-                type = create_remove_panel(HEADER_DELETE, message, HEIGHT_FUNCTIONAL_PANEL - 2,
-                                           WEIGHT_FUNCTIONAL_PANEL - 1 > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
-                                           message.length() + 2);
-
-                try {
-                    if (type == REMOVE_TYPE::REMOVE_ALL) {
-                        std::filesystem::remove_all(p);
-                    } else if (type == REMOVE_TYPE::REMOVE_THIS) {
-                        if (entry.is_directory()) {
-                            std::filesystem::remove_all(entry.path());
-                        } else std::filesystem::remove(entry.path());
-                    }
-                } catch (std::filesystem::filesystem_error &e) {
-                    int error_ind = e.code().value();
-                    if (error_ind == 13) {
-                        generate_permission_error(e);
-                    }
+        std::string message = "Delete: " + p.string();
+        type = create_remove_panel(HEADER_DELETE, message, HEIGHT_FUNCTIONAL_PANEL - 2,
+                                   WEIGHT_FUNCTIONAL_PANEL - 1 > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
+                                   message.length() + 2);
+        try {
+            if (type == REMOVE_TYPE::REMOVE_ALL) {
+                if (is_symlink(p)) {
+                    std::filesystem::remove(p);
+                } else {
+                    std::filesystem::remove_all(p);
                 }
-                display_content();
-                _other_panel.display_content();
-                if (type == REMOVE_TYPE::REMOVE_ALL) {
-                    read_current_dir();
-                    if (_other_panel.current_directory == current_directory) {
-                        _other_panel.read_current_dir();
-                    }
-                    return;
-                } else if (type == REMOVE_TYPE::STOP_REMOVE) {
-                    return;
+                read_current_dir();
+                if (_other_panel.current_directory == current_directory) {
+                    _other_panel.read_current_dir();
                 }
-                if (std::filesystem::is_directory(entry.path())) {
-                    dir_stack.push(entry.path());
-                }
+                return;
             }
+        } catch (std::filesystem::filesystem_error &e) {
+            int error_ind = e.code().value();
+            if (error_ind == 13) {
+                generate_permission_error(e);
+            }
+        }
+        if (type == REMOVE_TYPE::REMOVE_THIS) {
+            display_content();
+            _other_panel.display_content();
+            sequential_removing(p, _other_panel);
+        } else {
+            return;
         }
     } else {
         type = create_remove_panel(HEADER_DELETE, "Delete: " + content[current_ind].name_content,
@@ -706,6 +696,69 @@ void file_panel::delete_content(file_panel &_other_panel) {
                 if (error_ind == 13) {
                     generate_permission_error(e);
                 }
+            }
+        }
+    }
+}
+
+
+void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_other_panel) {
+
+    try {
+        if (is_symlink(_p)) {
+            std::filesystem::remove(_p);
+            read_current_dir();
+            if (_other_panel.current_directory == current_directory) {
+                _other_panel.read_current_dir();
+            }
+            return;
+        }
+    } catch (std::filesystem::filesystem_error &e) {
+        int error_ind = e.code().value();
+        if (error_ind == 13) {
+            generate_permission_error(e);
+        }
+    }
+
+    REMOVE_TYPE type;
+    std::stack<std::filesystem::path> dir_stack;
+    bool flag_delete_other = false;
+    dir_stack.push(_p);
+    while (!dir_stack.empty()) {
+        std::filesystem::path current_path = dir_stack.top();
+        dir_stack.pop();
+
+        for (const auto &entry: std::filesystem::directory_iterator(current_path,
+                                                                    std::filesystem::directory_options::skip_permission_denied)) {
+            if (!flag_delete_other) {
+                size_t ind = entry.path().string().find(content[current_ind].name_content);
+                std::string message = "Delete: " + entry.path().string().substr(ind);
+                type = create_remove_panel(HEADER_DELETE, message, HEIGHT_FUNCTIONAL_PANEL - 2,
+                                           WEIGHT_FUNCTIONAL_PANEL - 1 > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
+                                           message.length() + 2);
+            }
+            try {
+                if (type == REMOVE_TYPE::REMOVE_ALL) {
+                    flag_delete_other = true;
+                }
+                if (type == REMOVE_TYPE::REMOVE_THIS || flag_delete_other) {
+                    if (entry.is_directory()) {
+                        std::filesystem::remove_all(entry.path());
+                    } else std::filesystem::remove(entry.path());
+                }
+            } catch (std::filesystem::filesystem_error &e) {
+                int error_ind = e.code().value();
+                if (error_ind == 13) {
+                    generate_permission_error(e);
+                }
+            }
+            display_content();
+            _other_panel.display_content();
+            if (type == REMOVE_TYPE::STOP_REMOVE) {
+                return;
+            }
+            if (std::filesystem::is_directory(entry.path())) {
+                dir_stack.push(entry.path());
             }
         }
     }
