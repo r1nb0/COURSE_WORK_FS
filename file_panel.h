@@ -47,7 +47,7 @@
 
 enum class CONTENT_TYPE {
     IS_DIR = 0,
-    IS_LNK_TO_REG = 1,
+    IS_LNK_TO_DIR = 1,
     IS_LNK = 2,
     IS_REG = 3,
 };
@@ -108,13 +108,13 @@ public :
     void display_content();
     void edit_permissions(file_panel& _other_panel);
     void create_symlink(file_panel& _other_panel);
-    void create_hardlink(file_panel& _other_panel);
     void create_file(file_panel& _other_panel);
     void create_directory(file_panel& _other_panel);
     void delete_content(file_panel& _other_panel);
     void copy_content(file_panel& _other_panel);
     void move_content(std::string other_panel_path);
     void rename_content(file_panel& _other_panel);
+    void overwrite_content(file_panel& _other_panel, std::filesystem::path& _from, std::filesystem::path& _to);
 };
 
 void generate_permission_error(std::filesystem::filesystem_error& e);
@@ -130,12 +130,12 @@ bool is_input_field_dir_file(size_t _index);
 bool symlink_hardlink_func_panel(const std::string& _header, std::string& _namelink, std::string& _pointer, int height, int weight);
 bool create_redact_other_func_panel(const std::string& _header, const std::string& _description, std::string& _result, int height, int weight);
 bool navigation_functional_create_redact_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _result);
-bool navigation_symlink_hardlink_create_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _namelink, std::string& _pointer);
-bool navigation_symlink_edit_permissions(WINDOW* _win, FORM* _form, FIELD** _fields, char_permissions& _perms);
+bool navigation_symlink_create_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _namelink, std::string& _pointer);
+bool navigation_edit_permissions(WINDOW* _win, FORM* _form, FIELD** _fields, char_permissions& _perms);
 REMOVE_TYPE navigation_remove(WINDOW* _win, FORM* _form, FIELD** _fields);
 void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_t* _ind, int _offset);
 void create_error_panel(const std::string& _header, const std::string& _message, int height, int weight);
 bool change_permissions_panel(const std::string& _header, const std::string& _description, int height, int weight, char_permissions& _perms);
-REMOVE_TYPE create_remove_panel(const std::string& description, int height, int weight);
+REMOVE_TYPE create_remove_panel(const std::string& _header, const std::string& description, int height, int weight);
 
 #endif //COURSE_PROJECT_FILE_PANEL_H

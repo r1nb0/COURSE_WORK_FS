@@ -67,12 +67,6 @@ int main() {
                 : current_panel->create_symlink(left_panel);
                 break;
             }
-            case KEY_F(4) : {
-                current_panel == &left_panel
-                ? current_panel->create_hardlink(right_panel)
-                : current_panel->create_hardlink(left_panel);
-                break;
-            }
             case KEY_F(5) : {
                 current_panel == &left_panel
                 ? current_panel->create_directory(right_panel)
