@@ -192,10 +192,10 @@ void file_panel::switch_directory(const std::string &_direction) {
         || (std::filesystem::status(check_perm).permissions() & std::filesystem::perms::owner_exec) ==
            std::filesystem::perms::none) {
         std::string message = "Cannot chdir to " + _direction;
-        int size = static_cast<int>(message.length());
         create_error_panel(" Permission error ",
                            message, 8,
-                           WEIGHT_FUNCTIONAL_PANEL > size ? WEIGHT_FUNCTIONAL_PANEL : size + 2);
+                           WEIGHT_FUNCTIONAL_PANEL > message.length()
+                           ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
         return;
     }
     if (d == nullptr) {
@@ -442,15 +442,54 @@ void file_panel::copy_content(file_panel &_other_panel) {
                 return;
             }
 
+            if ((std::filesystem::status(copy_path_from).permissions() & std::filesystem::perms::owner_read) ==
+                std::filesystem::perms::none
+                || (std::filesystem::status(copy_path_from).permissions() & std::filesystem::perms::owner_exec) ==
+                   std::filesystem::perms::none) {
+                display_content();
+                _other_panel.display_content();
+                std::string message = "Cannot copy from '" + copy_path_from.string() + "'";
+                create_error_panel(" Permission error ",
+                                   message, HEIGHT_FUNCTIONAL_PANEL - 2,
+                                   WEIGHT_FUNCTIONAL_PANEL > message.length()
+                                   ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
+                return;
+            }
+
+            if ((std::filesystem::status(copy_path_to).permissions() & std::filesystem::perms::owner_write)
+                == std::filesystem::perms::none) {
+                display_content();
+                _other_panel.display_content();
+                std::string message = "Cannot copy to '" + copy_path_to.string() + "'";
+                create_error_panel(" Permission error ", message, HEIGHT_FUNCTIONAL_PANEL - 2,
+                                   WEIGHT_FUNCTIONAL_PANEL > message.length()
+                                   ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
+                return;
+            }
+
             if (is_directory(copy_path_from)) {
                 if (!exists(copy_path_to / content[current_ind].name_content)) {
-                    std::filesystem::create_directory(copy_path_to / content[current_ind].name_content);
-                    std::filesystem::copy(copy_path_from,
-                                          copy_path_to / content[current_ind].name_content,
-                                          std::filesystem::copy_options::recursive);
+                    try {
+                        if (content[current_ind].content_type == CONTENT_TYPE::IS_LNK_TO_DIR) {
+                            std::filesystem::copy_symlink(copy_path_from, copy_path_to / content[current_ind].name_content);
+                        } else {
+                            make_dirs_for_copying(copy_path_from, copy_path_to);
+                            std::filesystem::copy(copy_path_from,
+                                                  copy_path_to / content[current_ind].name_content,
+                                                  std::filesystem::copy_options::recursive);
+                        }
+                    } catch (std::filesystem::filesystem_error& e) {
+                        display_content();
+                        _other_panel.display_content();
+                        int error_ind = e.code().value();
+                        if (error_ind == 13) {
+                            generate_permission_error(e);
+                        }
+                    }
                     if (path == _other_panel.current_directory) {
                         _other_panel.read_current_dir();
                     }
+                    return;
                 } else {
                     std::string message = "Overwrite: " + path + "/" + content[current_ind].name_content;
                     display_content();
@@ -459,13 +498,28 @@ void file_panel::copy_content(file_panel &_other_panel) {
                                                            WEIGHT_FUNCTIONAL_PANEL > message.length()
                                                            ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
                     if (type == REMOVE_TYPE::REMOVE_ALL) {
-                        std::filesystem::copy(copy_path_from, copy_path_to / content[current_ind].name_content,
-                                              std::filesystem::copy_options::recursive
-                                              | std::filesystem::copy_options::overwrite_existing);
+                        try {
+                            if (is_symlink(copy_path_from)) {
+                                return;
+                            } else {
+                                std::filesystem::copy(copy_path_from, copy_path_to / content[current_ind].name_content,
+                                                      std::filesystem::copy_options::recursive
+                                                      | std::filesystem::copy_options::overwrite_existing);
+                            }
+                        } catch (std::filesystem::filesystem_error &e) {
+                            display_content();
+                            _other_panel.display_content();
+                            int error_ind = e.code().value();
+                            if (error_ind == 13) {
+                                generate_permission_error(e);
+                            }
+                        }
                         return;
                     } else if (type == REMOVE_TYPE::SKIP || type == REMOVE_TYPE::STOP_REMOVE) {
                         return;
                     } else {
+                        if (is_symlink(copy_path_from))
+                            return;
                         overwrite_content(_other_panel, copy_path_from, copy_path_to);
                     }
                 }
@@ -512,15 +566,24 @@ void file_panel::overwrite_content(file_panel &_other_panel, std::filesystem::pa
             std::string path_string = entry.path().string();
             std::filesystem::path copy_part(path_string.substr(path_string.find(content[current_ind].name_content)));
             if (!exists(_to / copy_part)) {
-                if (entry.is_directory()) {
-                    flag_skip = true;
-                    std::filesystem::create_directory(_to / copy_part);
-                    std::filesystem::copy(entry.path(), _to / copy_part,
-                                          std::filesystem::copy_options::recursive);
-                } else if (entry.is_symlink()) {
-                    std::filesystem::copy_symlink(entry.path(), _to / copy_part);
-                } else {
-                    std::filesystem::copy_file(entry.path(), _to / copy_part);
+                try {
+                    if (entry.is_symlink()) {
+                        std::filesystem::copy_symlink(entry.path(), _to / copy_part);
+                    } else if (entry.is_directory()) {
+                        flag_skip = true;
+                        make_dirs_for_copying(entry.path(), _to);
+                        std::filesystem::copy(entry.path(), _to / copy_part,
+                                              std::filesystem::copy_options::recursive);
+                    } else {
+                        std::filesystem::copy_file(entry.path(), _to / copy_part);
+                    }
+                } catch (std::filesystem::filesystem_error& e) {
+                    display_content();
+                    _other_panel.display_content();
+                    int error_ind = e.code().value();
+                    if (error_ind == 13) {
+                        generate_permission_error(e);
+                    }
                 }
             } else {
                 display_content();
@@ -537,22 +600,30 @@ void file_panel::overwrite_content(file_panel &_other_panel, std::filesystem::pa
                 if (type == REMOVE_TYPE::STOP_REMOVE) {
                     return;
                 } else if (type == REMOVE_TYPE::REMOVE_THIS || flag_remove_other) {
-                    if (entry.is_directory()) {
-                        flag_skip = true;
-                        std::filesystem::create_directory(_to / copy_part);
-                        std::filesystem::copy(entry.path(), _to / copy_part,
-                                              std::filesystem::copy_options::recursive
-                                              | std::filesystem::copy_options::overwrite_existing);
-                    } else if (entry.is_symlink()) {
-                        std::filesystem::copy_symlink(entry.path(),
-                                                      _to / copy_part);
-                    } else if (entry.is_character_file()
-                    || entry.is_block_file()
-                    || entry.is_regular_file()
-                    || entry.is_socket()
-                    || entry.is_fifo()){
-                        std::filesystem::copy_file(entry.path(), _to / copy_part,
-                                                   std::filesystem::copy_options::overwrite_existing);
+                    try {
+                        if (entry.is_symlink()) {
+                            std::filesystem::copy_symlink(entry.path(),
+                                                          _to / copy_part);
+                        } else if (entry.is_directory()) {
+                            flag_skip = true;
+                            std::filesystem::copy(entry.path(), _to / copy_part,
+                                                  std::filesystem::copy_options::recursive
+                                                  | std::filesystem::copy_options::overwrite_existing);
+                        } else if (entry.is_character_file()
+                                   || entry.is_block_file()
+                                   || entry.is_regular_file()
+                                   || entry.is_socket()
+                                   || entry.is_fifo()) {
+                            std::filesystem::copy_file(entry.path(), _to / copy_part,
+                                                       std::filesystem::copy_options::overwrite_existing);
+                        }
+                    } catch (std::filesystem::filesystem_error& e) {
+                        display_content();
+                        _other_panel.display_content();
+                        int error_ind = e.code().value();
+                        if (error_ind == 13) {
+                            generate_permission_error(e);
+                        }
                     }
                 }
             }
@@ -640,7 +711,7 @@ void file_panel::delete_content(file_panel &_other_panel) {
     }
     std::filesystem::path p(current_directory + "/" + content[current_ind].name_content);
     REMOVE_TYPE type;
-    bool flag_permission_read = false;
+    bool flag_permission_read;
     try {
         flag_permission_read = std::filesystem::is_empty(p);
     } catch (std::filesystem::filesystem_error &e) {
@@ -648,6 +719,7 @@ void file_panel::delete_content(file_panel &_other_panel) {
         if (error_ind == 13) {
             generate_permission_error(e);
         }
+        return;
     }
     if (is_directory(p) && !flag_permission_read) {
         std::string message = "Delete: " + p.string();
@@ -764,10 +836,23 @@ void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_oth
     }
 }
 
+void file_panel::make_dirs_for_copying(const std::filesystem::path &_from, const std::filesystem::path &_to) {
+    std::string path_from = _from.string();
+    std::filesystem::create_directory(_to / path_from.substr(path_from.find(content[current_ind].name_content)));
+    for (const auto & entry : std::filesystem::recursive_directory_iterator(_from, std::filesystem::directory_options::skip_permission_denied)) {
+        if (entry.is_directory()) {
+            std::string path_string = entry.path().string();
+            std::filesystem::path part(path_string.substr(path_string.find(content[current_ind].name_content)));
+            std::filesystem::create_directory(_to / part);
+        }
+    }
+}
+
 void generate_permission_error(std::filesystem::filesystem_error &e) {
-//    size_t ind = e.path1().string().find(find_str);
-//    std::string message = func + e.path1().string().substr(ind);
     std::string message = e.path1().string();
+    if (message.empty()) {
+        message = "Recursive error. Check files for access reading";
+    }
     int len = static_cast<int>(message.length());
     create_error_panel(" Permission error ", message,
                        HEIGHT_FUNCTIONAL_PANEL - 2,

@@ -24,7 +24,6 @@
 #define HEADER_SIZE "Size"
 #define HEADER_MODIFY_DATE "Modify date"
 #define HEADER_CREATE_SYMLINK " Create symlink "
-#define HEADER_CREATE_HARDLINK " Create hardlink "
 #define HEADER_CREATE_DIR " Make directory "
 #define HEADER_CREATE_FILE " Touch file "
 #define HEADER_RENAME " Rename "
@@ -116,6 +115,7 @@ public :
     void move_content(std::string other_panel_path);
     void rename_content(file_panel& _other_panel);
     void overwrite_content(file_panel& _other_panel, std::filesystem::path& _from, std::filesystem::path& _to);
+    void make_dirs_for_copying(const std::filesystem::path& _from, const std::filesystem::path& _to);
 };
 
 void generate_permission_error(std::filesystem::filesystem_error& e);
