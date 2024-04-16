@@ -112,9 +112,10 @@ public :
     void delete_content(file_panel& _other_panel);
     void sequential_removing(std::filesystem::path& _p, file_panel& _other_panel);
     void copy_content(file_panel& _other_panel);
-    void move_content(std::string other_panel_path);
+    void move_content(file_panel& _other_panel);
     void rename_content(file_panel& _other_panel);
-    void overwrite_content(file_panel& _other_panel, std::filesystem::path& _from, std::filesystem::path& _to);
+    void overwrite_content_copy(file_panel& _other_panel, std::filesystem::path& _from, std::filesystem::path& _to);
+    void overwrite_content_move(file_panel& _other_panel, std::filesystem::path& _from, std::filesystem::path& _to);
     void make_dirs_for_copying(const std::filesystem::path& _from, const std::filesystem::path& _to);
 };
 

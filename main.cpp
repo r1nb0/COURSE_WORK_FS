@@ -93,8 +93,8 @@ int main() {
             }
             case KEY_F(9) : {
                 current_panel == &left_panel
-                ? current_panel->move_content(right_panel.get_current_directory())
-                : current_panel->move_content(left_panel.get_current_directory());
+                ? current_panel->move_content(right_panel)
+                : current_panel->move_content(left_panel);
                 break;
             }
             case 'p' : {
