@@ -103,6 +103,10 @@ int main() {
                 : current_panel->edit_permissions(left_panel);
                 break;
             }
+            case 'h' : {
+                create_history_panel();
+                break;
+            }
             case '\t' : {
                 current_panel->set_active_panel(false);
                 current_panel == &left_panel ? (current_panel = &right_panel)

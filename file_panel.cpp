@@ -1,6 +1,8 @@
 #include <cstring>
 #include "file_panel.h"
 
+history_panel history_vec;
+
 void file_panel::read_current_dir() {
     if (!content.empty()) {
         content.clear();
@@ -182,7 +184,11 @@ void file_panel::switch_directory(const std::string &_direction) {
         }
         d = opendir(new_current_directory.c_str());
     } else {
-        new_current_directory = current_directory + "/" + _direction;
+        if (current_directory == "/") {
+            new_current_directory = current_directory + _direction;
+        } else {
+            new_current_directory = current_directory + "/" + _direction;
+        }
         d = opendir(new_current_directory.c_str());
     }
     std::filesystem::path check_perm(new_current_directory);
@@ -203,6 +209,15 @@ void file_panel::switch_directory(const std::string &_direction) {
     }
     start_index = 0;
     current_ind = 0;
+    auto it = std::find(history_vec.history_path.begin(),
+                        history_vec.history_path.end(),
+                        new_current_directory);
+    if (it == history_vec.history_path.end()) {
+        if (new_current_directory.length() > history_vec.max_len) {
+            history_vec.max_len = new_current_directory.length();
+        }
+        history_vec.history_path.push_back(new_current_directory);
+    }
     current_directory = new_current_directory;
     read_current_dir();
 }
@@ -1224,6 +1239,7 @@ void init_colors() {
     init_pair(8, COLOR_RED, COLOR_BLUE);
     init_pair(9, COLOR_WHITE, COLOR_RED);
     init_pair(10, COLOR_YELLOW, COLOR_BLUE);
+    init_pair(11, COLOR_YELLOW, COLOR_BLUE);
 }
 
 void move_cursor_left_from_input_field(size_t *_current_index, int *_current_offset_field) {
@@ -1611,4 +1627,91 @@ void convert_to_output(std::string &_name, CONTENT_TYPE _type) {
         default :
             break;
     }
+}
+
+void create_history_panel() {
+    if (history_vec.history_path.empty()) {
+        create_error_panel(" History error ", "History is empty.", HEIGHT_FUNCTIONAL_PANEL - 2, WEIGHT_FUNCTIONAL_PANEL);
+        return;
+    }
+    int weight = history_vec.max_len > WEIGHT_HISTORY_PANEL - 2 ? static_cast<int>(history_vec.max_len) + 2 : WEIGHT_HISTORY_PANEL;
+    int height = 15;
+    WINDOW* win = newwin(height, weight, (LINES - height) / 2, (COLS - weight) / 2);
+    wbkgd(win, COLOR_PAIR(11));
+    size_t start = 0;
+    size_t current_ind = 0;
+    history_show_content(win, height, weight, start, current_ind);
+    bool flag_continue = true;
+    while(flag_continue) {
+        switch(getch()) {
+            case KEY_RESIZE : {
+                flag_continue = false;
+                break;
+            }
+            case KEY_DOWN : {
+                history_pagination(KEY_DOWN, height, start, current_ind);
+                history_show_content(win, height, weight, start, current_ind);
+                break;
+            }
+            case KEY_UP : {
+                history_pagination(KEY_UP,  height, start, current_ind);
+                history_show_content(win, height, weight, start, current_ind);
+                break;
+            }
+            case '\n' : {
+                break;
+            }
+            case 'h' : {
+                flag_continue = false;
+                break;
+            }
+        }
+    }
+    delwin(win);
+}
+
+void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _start, size_t _current_ind) {
+    werase(_win);
+    refresh();
+    box(_win, 0, 0);
+    wattron(_win, A_BOLD);
+    mvwprintw(_win, 0, static_cast<int>(_weight - (strlen(HISTORY_HEADER))) / 2, "%s", HISTORY_HEADER);
+    wattroff(_win, A_BOLD);
+
+    size_t offset = 1;
+    for (size_t i = _start; i < history_vec.history_path.size() && i < (_height - 2) + _start; i++) {
+        if (_current_ind == i) {
+            wattron(_win, A_REVERSE);
+        }
+        mvwprintw(_win, static_cast<int>(offset), 1, "%*s", static_cast<int>(_height - 2), " ");
+        mvwprintw(_win, static_cast<int>(offset), 1, "%s", history_vec.history_path[i].c_str());
+        wattroff(_win, A_REVERSE);
+        offset++;
+    }
+    refresh_history_panel(_win);
+}
+
+void history_pagination(size_t _direction, size_t _height, size_t &_start, size_t &_current_ind) {
+    if (_direction == KEY_UP) {
+        if (_current_ind == 0) {
+            _start = 0;
+        } else if (_current_ind != _start) {
+            _current_ind--;
+        } else {
+            _start -= _height - 2;
+            _current_ind--;
+        }
+    } else if (_direction == KEY_DOWN) {
+        if (_current_ind + 1 < history_vec.history_path.size()) {
+            if (_current_ind + 1 >= _height - 2 + _start) {
+                _start += _height - 2;
+            }
+            _current_ind++;
+        }
+    }
+}
+
+void refresh_history_panel(WINDOW *_win) {
+    wrefresh(_win);
+    refresh();
 }

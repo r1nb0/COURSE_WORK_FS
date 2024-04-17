@@ -41,8 +41,16 @@
 #define DESCRIPTION_DIRECTORY "Type directory name:"
 #define PRESS_ANY_BUTTON " Press any key to continue "
 #define EDIT_PERMISSIONS " Change file(s) permissions "
+#define HISTORY_HEADER " History switches "
 #define HEIGHT_FUNCTIONAL_PANEL 10
 #define WEIGHT_FUNCTIONAL_PANEL 60
+#define WEIGHT_HISTORY_PANEL 45
+
+
+struct history_panel {
+    std::vector<std::string> history_path;
+    size_t max_len = 0;
+};
 
 enum class CONTENT_TYPE {
     IS_DIR = 0,
@@ -139,5 +147,9 @@ void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_
 void create_error_panel(const std::string& _header, const std::string& _message, int height, int weight);
 bool change_permissions_panel(const std::string& _header, const std::string& _description, int height, int weight, char_permissions& _perms);
 REMOVE_TYPE create_remove_panel(const std::string& _header, const std::string& description, int height, int weight);
+void create_history_panel();
+void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _start, size_t _current_ind);
+void history_pagination(size_t _direction, size_t _height, size_t& _start, size_t& _current_ind);
+void refresh_history_panel(WINDOW* _win);
 
 #endif //COURSE_PROJECT_FILE_PANEL_H
