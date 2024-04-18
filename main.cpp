@@ -37,12 +37,9 @@ int main() {
                 break;
             }
             case '\n' : {
-                if (current_panel->get_content()[current_panel->get_current_ind()]
-                            .content_type == CONTENT_TYPE::IS_DIR) {
-                    current_panel->switch_directory(current_panel
-                                                            ->get_content()[current_panel->get_current_ind()]
-                                                            .name_content);
-                }
+                current_panel->switch_directory(current_panel
+                                                        ->get_content()[current_panel->get_current_ind()]
+                                                        .name_content);
                 break;
             }
             case KEY_RESIZE : {

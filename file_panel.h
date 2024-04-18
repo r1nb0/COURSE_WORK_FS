@@ -46,7 +46,6 @@
 #define WEIGHT_FUNCTIONAL_PANEL 60
 #define WEIGHT_HISTORY_PANEL 45
 
-
 struct history_panel {
     std::vector<std::string> history_path;
     size_t max_len = 0;
@@ -127,6 +126,7 @@ public :
     void make_dirs_for_copying(const std::filesystem::path& _from, const std::filesystem::path& _to);
 };
 
+void generate_incompatible_error(std::filesystem::filesystem_error& e);
 void generate_permission_error(std::filesystem::filesystem_error& e);
 WINDOW* create_functional_panel(const std::string& _header, int _height, int _weight);
 void init_colors();
