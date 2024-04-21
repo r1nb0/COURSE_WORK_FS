@@ -756,6 +756,9 @@ void file_panel::move_content(file_panel& _other_panel) {
                     std::filesystem::rename(move_from, move_to_full);
                     _other_panel.read_current_dir();
                     this->read_current_dir();
+                    if (current_ind >= content.size()) {
+                        current_ind = content.size() - 1;
+                    }
                 } catch (std::filesystem::filesystem_error& e) {
                     display_content();
                     _other_panel.display_content();
@@ -797,6 +800,9 @@ void file_panel::move_content(file_panel& _other_panel) {
                         std::filesystem::remove(move_from);
                     }
                     this->read_current_dir();
+                    if (current_ind >= content.size()) {
+                        current_ind = content.size() - 1;
+                    }
                 } else {
                     std::string message = "Overwrite: " + move_to_full.string();
                     REMOVE_TYPE type = create_remove_panel(HEADER_MOVE, message, HEIGHT_FUNCTIONAL_PANEL - 2,
@@ -824,6 +830,9 @@ void file_panel::move_content(file_panel& _other_panel) {
                             std::filesystem::remove(move_to_full);
                             std::filesystem::rename(move_from, move_to_full);
                             read_current_dir();
+                            if (current_ind >= content.size()) {
+                                current_ind = content.size() - 1;
+                            }
                             if (_other_panel.current_directory == path_to_move) {
                                 _other_panel.read_current_dir();
                             }
@@ -938,8 +947,16 @@ void file_panel::delete_content(file_panel &_other_panel) {
                     sequential_removing(p, _other_panel, true);
                 }
                 read_current_dir();
+                bool is_end = false;
+                if (current_ind >= content.size()) {
+                    current_ind = content.size() - 1;
+                    is_end = true;
+                }
                 if (_other_panel.current_directory == current_directory) {
                     _other_panel.read_current_dir();
+                    if (is_end) {
+                        _other_panel.current_ind = _other_panel.content.size() - 1;
+                    }
                 }
                 return;
             }
@@ -953,6 +970,20 @@ void file_panel::delete_content(file_panel &_other_panel) {
             display_content();
             _other_panel.display_content();
             sequential_removing(p, _other_panel, false);
+            if (!std::filesystem::exists(p)) {
+                read_current_dir();
+                bool is_end = false;
+                if (current_ind >= content.size()) {
+                    current_ind = content.size() - 1;
+                    is_end = true;
+                }
+                if (_other_panel.current_directory == current_directory) {
+                    _other_panel.read_current_dir();
+                    if (is_end) {
+                        _other_panel.current_ind = _other_panel.content.size() - 1;
+                    }
+                }
+            }
         } else {
             return;
         }
@@ -964,8 +995,16 @@ void file_panel::delete_content(file_panel &_other_panel) {
             try {
                 std::filesystem::remove(p);
                 read_current_dir();
+                bool is_end = false;
+                if (current_ind >= content.size()) {
+                    current_ind = content.size() - 1;
+                    is_end = true;
+                }
                 if (_other_panel.current_directory == current_directory) {
                     _other_panel.read_current_dir();
+                    if (is_end) {
+                        _other_panel.current_ind = _other_panel.content.size() - 1;
+                    }
                 }
             } catch (std::filesystem::filesystem_error &e) {
                 int error_ind = e.code().value();
@@ -979,7 +1018,6 @@ void file_panel::delete_content(file_panel &_other_panel) {
 
 
 void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_other_panel, bool _all) {
-
     try {
         if (is_symlink(_p)) {
             std::filesystem::remove(_p);
