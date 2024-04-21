@@ -509,24 +509,11 @@ void file_panel::copy_content(file_panel &_other_panel) {
 
             if (is_directory(copy_path_from)) {
                 if (!exists(copy_to_full)) {
-                    try {
-                        if (content[current_ind].content_type == CONTENT_TYPE::IS_LNK_TO_DIR) {
-                            std::filesystem::copy_symlink(copy_path_from, copy_path_to / content[current_ind].name_content);
-                        } else {
-                            make_dirs_for_copying(copy_path_from, copy_path_to);
-                            std::filesystem::copy(copy_path_from,
-                                                  copy_path_to / content[current_ind].name_content,
-                                                  std::filesystem::copy_options::recursive);
-                        }
-                    } catch (std::filesystem::filesystem_error& e) {
-                        display_content();
-                        _other_panel.display_content();
-                        int error_ind = e.code().value();
-                        if (error_ind == 13) {
-                            generate_permission_error(e);
-                        } else if (error_ind == 21 || error_ind == 22) {
-                            generate_incompatible_error(e);
-                        }
+                        //try catch exist
+                    if (content[current_ind].content_type == CONTENT_TYPE::IS_LNK_TO_DIR) {
+                        std::filesystem::copy_symlink(copy_path_from, copy_path_to / content[current_ind].name_content);
+                    } else {
+                        overwrite_content_copy(_other_panel, copy_path_from, copy_path_to, false);
                     }
                     if (path == _other_panel.current_directory) {
                         _other_panel.read_current_dir();
@@ -550,40 +537,49 @@ void file_panel::copy_content(file_panel &_other_panel) {
                     REMOVE_TYPE type = create_remove_panel(" Copy file(s) ", message, HEIGHT_FUNCTIONAL_PANEL - 2,
                                                            WEIGHT_FUNCTIONAL_PANEL > message.length()
                                                            ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
-                    if (type == REMOVE_TYPE::REMOVE_ALL) {
-                        try {
-                            if (is_symlink(copy_path_from)) {
-                                std::filesystem::remove(copy_to_full);
-                                std::filesystem::copy_symlink(copy_path_from, copy_to_full);
-                                _other_panel.read_current_dir();
-                                return;
-                            } else {
-                                std::filesystem::copy(copy_path_from, copy_to_full,
-                                                      std::filesystem::copy_options::recursive
-                                                      | std::filesystem::copy_options::overwrite_existing);
-                            }
-                        } catch (std::filesystem::filesystem_error &e) {
-                            display_content();
-                            _other_panel.display_content();
-                            int error_ind = e.code().value();
-                            if (error_ind == 13) {
-                                generate_permission_error(e);
-                            } else if (error_ind == 21 || error_ind == 22) {
-                                generate_incompatible_error(e);
-                            }
-                        }
+                    if (is_symlink(copy_path_from)
+                        && (type == REMOVE_TYPE::REMOVE_ALL || type == REMOVE_TYPE::REMOVE_THIS)) {
+                        std::filesystem::remove(copy_to_full);
+                        std::filesystem::copy_symlink(copy_path_from, copy_to_full);
+                        _other_panel.read_current_dir();
                         return;
+                    }
+                    if (type == REMOVE_TYPE::REMOVE_ALL) {
+                        overwrite_content_copy(_other_panel, copy_path_from, copy_path_to, true);
                     } else if (type == REMOVE_TYPE::SKIP || type == REMOVE_TYPE::STOP_REMOVE) {
                         return;
                     } else {
-                        overwrite_content_copy(_other_panel, copy_path_from, copy_path_to);
+                        overwrite_content_copy(_other_panel, copy_path_from, copy_path_to, false);
                     }
                 }
                 return;
             }
             try {
+                if (std::filesystem::exists(copy_to_full)) {
+                    bool is_correct_types = true;
+                    if (is_symlink(copy_path_from)) {
+                        if (!is_symlink(copy_to_full)) {
+                            is_correct_types = false;
+                        }
+                    } else if (!is_symlink(copy_path_from)) {
+                        if (is_symlink(copy_to_full)) {
+                            is_correct_types = false;
+                        }
+                    }
+                    if (!is_correct_types) {
+                        throw std::filesystem::filesystem_error("Another types", copy_path_from,
+                                                                copy_to_full,
+                                                                std::error_code(21, std::iostream_category()));
+                    }
+                }
                 if (is_symlink(copy_path_from)) {
-                    //
+                    if (exists(copy_to_full)) {
+                        std::filesystem::remove(copy_to_full);
+                        std::filesystem::copy_symlink(copy_path_from, copy_path_to / content[current_ind].name_content);
+                        if (copy_path_to == _other_panel.current_directory) {
+                            _other_panel.read_current_dir();
+                        }
+                    }
                     std::filesystem::copy_symlink(copy_path_from, copy_path_to / content[current_ind].name_content);
                     _other_panel.read_current_dir();
                 } else if (is_character_file(copy_path_from)
@@ -605,7 +601,9 @@ void file_panel::copy_content(file_panel &_other_panel) {
                                                        std::filesystem::copy_options::overwrite_existing);
                         }
                     }
-                    _other_panel.read_current_dir();
+                    if (copy_path_to == _other_panel.current_directory) {
+                        _other_panel.read_current_dir();
+                    }
                 }
             } catch (std::filesystem::filesystem_error& e) {
                 display_content();
@@ -621,110 +619,101 @@ void file_panel::copy_content(file_panel &_other_panel) {
     }
 }
 
-void file_panel::overwrite_content_copy(file_panel &_other_panel, std::filesystem::path &_from, std::filesystem::path &_to) {
+void file_panel::overwrite_content_copy(file_panel &_other_panel, std::filesystem::path &_from, std::filesystem::path &_to, bool _all) {
+    bool overwrite_other = _all;
+    REMOVE_TYPE type;
     std::stack<std::filesystem::path> dir_stack;
     dir_stack.push(_from);
-    bool flag_remove_other = false;
-    REMOVE_TYPE type;
+    if (!exists((_to / content[current_ind].name_content))) {
+        std::filesystem::create_directory(_to / content[current_ind].name_content);
+    }
+    size_t pop = 0;
+    size_t push = 0;
+    size_t index = _from.string().rfind(content[current_ind].name_content);
     while (!dir_stack.empty()) {
         std::filesystem::path current_path = dir_stack.top();
+        pop++;
         dir_stack.pop();
         for (const auto &entry: std::filesystem::directory_iterator(current_path, std::filesystem::directory_options::skip_permission_denied)) {
-            bool flag_skip = false;
             std::string path_string = entry.path().string();
-            //std::filesystem::path copy_part(path_string.substr(path_string.find(content[current_ind].name_content)));
-            std::filesystem::path copy_part(path_string.substr(path_string.rfind(content[current_ind].name_content)));
+            std::filesystem::path copy_part(path_string.substr(index));
+            bool flag_skip = false;
             std::filesystem::path full_copy_path = _to / copy_part;
-            if (!exists(full_copy_path)) {
-                try {
+            try {
+                if (!exists(full_copy_path)) {
                     if (entry.is_directory()) {
-                        flag_skip = true;
                         if (entry.is_symlink()) {
                             std::filesystem::copy_symlink(entry.path(), full_copy_path);
                         } else {
-                            make_dirs_for_copying(entry.path(), _to);
-                            std::filesystem::copy(entry.path(), full_copy_path,
-                                                  std::filesystem::copy_options::recursive);
+                            std::filesystem::create_directory(full_copy_path);
                         }
                     } else if (entry.is_symlink()) {
                         std::filesystem::copy_symlink(entry.path(), full_copy_path);
-                    }  else {
+                    } else if (entry.is_regular_file() || entry.is_character_file() || entry.is_block_file()
+                               || entry.is_socket() || entry.is_fifo()) {
                         std::filesystem::copy_file(entry.path(), full_copy_path);
                     }
-                } catch (std::filesystem::filesystem_error& e) {
-                    display_content();
-                    _other_panel.display_content();
-                    int error_ind = e.code().value();
-                    if (error_ind == 13) {
-                        generate_permission_error(e);
-                    } else if (error_ind == 21 || error_ind == 22) {
-                        generate_incompatible_error(e);
-                    }
-                }
-            } else {
-                //into if
-                if (!flag_remove_other) {
-                    display_content();
-                    _other_panel.display_content();
-                    std::string message = "Overwrite: " + path_string;
-                    type = create_remove_panel(" Copy file(s) ", message, HEIGHT_FUNCTIONAL_PANEL - 2,
-                                                       WEIGHT_FUNCTIONAL_PANEL > message.length()
-                                                       ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
-                }
-                if (type == REMOVE_TYPE::REMOVE_ALL) {
-                    display_content();
-                    _other_panel.display_content();
-                    flag_remove_other = true;
-                }
-                if (type == REMOVE_TYPE::STOP_REMOVE) {
-                    return;
-                } else if (type == REMOVE_TYPE::REMOVE_THIS || flag_remove_other) {
-                    try {
-                        if (entry.is_directory()) {
-                            flag_skip = true;
-                            if (is_symlink(full_copy_path)) {
-                                throw std::filesystem::filesystem_error("Another types",
-                                                                        entry.path(), full_copy_path,
-                                                                        std::error_code(21, std::iostream_category()));
-                            }
-                            if (entry.is_symlink()) {
-                                if (is_directory(full_copy_path)) {
-                                    throw std::filesystem::filesystem_error("Another types",
-                                                                            entry.path(), full_copy_path,
-                                                                            std::error_code(21,std::iostream_category()));
-                                }
-                                std::filesystem::remove(full_copy_path);
-                                std::filesystem::copy_symlink(entry.path(), full_copy_path);
-                            } else {
-                                std::filesystem::copy(entry.path(), full_copy_path,
-                                                      std::filesystem::copy_options::recursive
-                                                      | std::filesystem::copy_options::overwrite_existing);
-                            }
-                        } else if (entry.is_symlink()) {
-                            std::filesystem::remove(full_copy_path);
-                            std::filesystem::copy_symlink(entry.path(),
-                                                          _to / copy_part);
-                        } else if (entry.is_character_file()
-                                   || entry.is_block_file()
-                                   || entry.is_regular_file()
-                                   || entry.is_socket()
-                                   || entry.is_fifo()) {
-                            std::filesystem::copy_file(entry.path(), full_copy_path,
-                                                       std::filesystem::copy_options::overwrite_existing);
-                        }
-                    } catch (std::filesystem::filesystem_error& e) {
+                } else {
+                    if (!overwrite_other) {
                         display_content();
                         _other_panel.display_content();
-                        int error_ind = e.code().value();
-                        if (error_ind == 13) {
-                            generate_permission_error(e);
-                        } else if (error_ind == 21 || error_ind == 22) {
-                            generate_incompatible_error(e);
+                        std::string message = "Overwrite: " + path_string;
+                        type = create_remove_panel(HEADER_COPY, message, HEIGHT_FUNCTIONAL_PANEL - 2,
+                                                   WEIGHT_FUNCTIONAL_PANEL > message.length()
+                                                   ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
+                    }
+                    if (type == REMOVE_TYPE::REMOVE_ALL) {
+                        display_content();
+                        _other_panel.display_content();
+                        overwrite_other = true;
+                    } else if (type == REMOVE_TYPE::STOP_REMOVE) {
+                        return;
+                    } else if (type == REMOVE_TYPE::REMOVE_THIS || overwrite_other) {
+                        bool is_correct_types = true;
+                        if ((entry.is_directory() && !entry.is_symlink())) {
+                            if (is_directory(full_copy_path) && !is_symlink(full_copy_path)) {
+                                is_correct_types = true;
+                            } else {
+                                is_correct_types = false;
+                                flag_skip = true;
+                            }
+                        } else if ((entry.is_symlink() && entry.is_directory()) ||
+                                   (entry.is_symlink() && !entry.is_directory())) {
+                            if (!is_symlink(full_copy_path)) {
+                                is_correct_types = false;
+                            }
+                        } else if (!entry.is_symlink()) {
+                            if (is_symlink(full_copy_path)) {
+                                is_correct_types = false;
+                            }
+                        }
+                        if (is_correct_types) {
+                            if ((entry.is_directory() && entry.is_symlink()) || (entry.is_symlink())) {
+                                std::filesystem::remove(full_copy_path);
+                                std::filesystem::copy_symlink(entry.path(), full_copy_path);
+                            } else if (entry.is_regular_file() || entry.is_fifo() || entry.is_character_file()
+                                       || entry.is_block_file() || entry.is_socket()) {
+                                std::filesystem::copy_file(entry.path(), full_copy_path,
+                                                           std::filesystem::copy_options::overwrite_existing);
+                            }
+                        } else {
+                            throw std::filesystem::filesystem_error("Another types", entry.path(), full_copy_path,
+                                                                    std::error_code(21, std::iostream_category()));
                         }
                     }
                 }
+            } catch (std::filesystem::filesystem_error& e) {
+                display_content();
+                _other_panel.display_content();
+                int error_ind = e.code().value();
+                if (error_ind == 13) {
+                    generate_permission_error(e);
+                } else if (error_ind == 21 || error_ind == 22) {
+                    generate_incompatible_error(e);
+                }
             }
-            if (entry.is_directory() && !flag_skip && !flag_remove_other) {
+            if (!flag_skip && entry.is_directory()) {
+                push++;
                 dir_stack.push(entry.path());
             }
         }
@@ -815,6 +804,23 @@ void file_panel::move_content(file_panel& _other_panel) {
                                                            ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
                     if (type == REMOVE_TYPE::REMOVE_ALL || type == REMOVE_TYPE::REMOVE_THIS) {
                         try {
+                            if (std::filesystem::exists(move_to_full)) {
+                                bool is_correct_types = true;
+                                if (is_symlink(move_from)) {
+                                    if (!is_symlink(move_to_full)) {
+                                        is_correct_types = false;
+                                    }
+                                } else if (!is_symlink(move_from)) {
+                                    if (is_symlink(move_to_full)) {
+                                        is_correct_types = false;
+                                    }
+                                }
+                                if (!is_correct_types) {
+                                    throw std::filesystem::filesystem_error("Another types", move_from,
+                                                                            move_to_full, std::error_code(21,
+                                                                                                          std::iostream_category()));
+                                }
+                            }
                             std::filesystem::remove(move_to_full);
                             std::filesystem::rename(move_from, move_to_full);
                             read_current_dir();
@@ -929,7 +935,7 @@ void file_panel::delete_content(file_panel &_other_panel) {
                 if (is_symlink(p)) {
                     std::filesystem::remove(p);
                 } else {
-                    std::filesystem::remove_all(p);
+                    sequential_removing(p, _other_panel, true);
                 }
                 read_current_dir();
                 if (_other_panel.current_directory == current_directory) {
@@ -946,7 +952,7 @@ void file_panel::delete_content(file_panel &_other_panel) {
         if (type == REMOVE_TYPE::REMOVE_THIS) {
             display_content();
             _other_panel.display_content();
-            sequential_removing(p, _other_panel);
+            sequential_removing(p, _other_panel, false);
         } else {
             return;
         }
@@ -972,7 +978,7 @@ void file_panel::delete_content(file_panel &_other_panel) {
 }
 
 
-void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_other_panel) {
+void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_other_panel, bool _all) {
 
     try {
         if (is_symlink(_p)) {
@@ -989,20 +995,18 @@ void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_oth
             generate_permission_error(e);
         }
     }
-
     REMOVE_TYPE type;
+    size_t index = _p.string().rfind(content[current_ind].name_content);
     std::stack<std::filesystem::path> dir_stack;
-    bool flag_delete_other = false;
+    bool flag_delete_other = _all;
     dir_stack.push(_p);
     while (!dir_stack.empty()) {
         std::filesystem::path current_path = dir_stack.top();
         dir_stack.pop();
-
         for (const auto &entry: std::filesystem::directory_iterator(current_path,
                                                                     std::filesystem::directory_options::skip_permission_denied)) {
             if (!flag_delete_other) {
-                size_t ind = entry.path().string().find(content[current_ind].name_content);
-                std::string message = "Delete: " + entry.path().string().substr(ind);
+                std::string message = "Delete: " + entry.path().string().substr(index);
                 type = create_remove_panel(HEADER_DELETE, message, HEIGHT_FUNCTIONAL_PANEL - 2,
                                            WEIGHT_FUNCTIONAL_PANEL - 1 > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
                                            message.length() + 2);
@@ -1016,6 +1020,7 @@ void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_oth
                         std::filesystem::remove_all(entry.path());
                     } else std::filesystem::remove(entry.path());
                 }
+
             } catch (std::filesystem::filesystem_error &e) {
                 int error_ind = e.code().value();
                 if (error_ind == 13) {
@@ -1032,35 +1037,9 @@ void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_oth
             }
         }
     }
-}
-
-void file_panel::make_dirs_for_copying(const std::filesystem::path &_from, const std::filesystem::path &_to) {
-    std::string path_from = _from.string();
-    //create_error_panel("123", _to / path_from.substr(path_from.find(content[current_ind].name_content)), HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL);
-    std::filesystem::create_directory(_to / path_from.substr(path_from.rfind(content[current_ind].name_content)));
-    for (const auto & entry : std::filesystem::recursive_directory_iterator(_from, std::filesystem::directory_options::skip_permission_denied)) {
-        try {
-            if (entry.is_directory()) {
-                std::string path_string = entry.path().string();
-                std::filesystem::path part(path_string.substr(path_string.find(content[current_ind].name_content)));
-                if (entry.is_symlink()) {
-                    std::filesystem::copy_symlink(entry.path(), _to / part);
-                } else {
-                    std::filesystem::create_directory(_to / part);
-                }
-            } else if (entry.is_symlink()) {
-                std::string path_string = entry.path().string();
-                std::filesystem::path part(path_string.substr(path_string.find(content[current_ind].name_content)));
-                std::filesystem::copy_symlink(entry.path(), _to / part);
-            }
-        } catch (std::filesystem::filesystem_error& e) {
-            create_error_panel("123", "123", 10, 10);
-            int error_ind = e.code().value();
-            if (error_ind == 13) {
-                generate_permission_error(e);
-            } else if (error_ind == 21 || error_ind == 22) {
-                generate_incompatible_error(e);
-            }
+    if (flag_delete_other) {
+        if (std::filesystem::is_empty(_p)) {
+            std::filesystem::remove(_p);
         }
     }
 }
@@ -1077,6 +1056,7 @@ void file_panel::overwrite_content_move(file_panel &_other_panel, std::filesyste
     } else if (type == REMOVE_TYPE::STOP_REMOVE || type == REMOVE_TYPE::SKIP) {
         return;
     }
+    size_t index = _from.string().rfind(content[current_ind].name_content);
     std::stack<std::filesystem::path> dir_stack;
     dir_stack.push(_from);
     while(!dir_stack.empty()) {
@@ -1086,19 +1066,9 @@ void file_panel::overwrite_content_move(file_panel &_other_panel, std::filesyste
         for (const auto& entry : std::filesystem::directory_iterator(current_path, std::filesystem::directory_options::skip_permission_denied)) {
             bool flag_skip = false;
             std::string path_string = entry.path().string();
-            //std::filesystem::path copy_part(path_string.substr(path_string.find(content[current_ind].name_content)));
-            std::filesystem::path copy_part(path_string.substr(path_string.rfind(content[current_ind].name_content)));
+            std::filesystem::path copy_part(path_string.substr(index));
+            //std::filesystem::path copy_part(path_string.substr(path_string.rfind(content[current_ind].name_content)));
             std::filesystem::path full_copy_to(_to / copy_part);
-            if (((entry.status().permissions() & std::filesystem::perms::owner_read)
-                 == std::filesystem::perms::none) && entry.is_directory()) {
-                display_content();
-                _other_panel.display_content();
-                message = "Cannot overwrite from '" + entry.path().string() + "'";
-                create_error_panel(" Permission error ", message, HEIGHT_FUNCTIONAL_PANEL - 2,
-                                   WEIGHT_FUNCTIONAL_PANEL > message.length()
-                                   ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
-                continue;
-            }
             if (!exists(full_copy_to)) {
                 flag_skip = true;
                 try {
@@ -1119,7 +1089,7 @@ void file_panel::overwrite_content_move(file_panel &_other_panel, std::filesyste
                     display_content();
                     _other_panel.display_content();
                     message = "Overwrite: " + path_string;
-                    type = create_remove_panel(" Move file(s) ", message, HEIGHT_FUNCTIONAL_PANEL - 2,
+                    type = create_remove_panel(HEADER_MOVE, message, HEIGHT_FUNCTIONAL_PANEL - 2,
                                                WEIGHT_FUNCTIONAL_PANEL > message.length()
                                                ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
                 }
@@ -1143,6 +1113,10 @@ void file_panel::overwrite_content_move(file_panel &_other_panel, std::filesyste
                         } else if ((entry.is_symlink() && entry.is_directory()) ||
                                    (entry.is_symlink() && !entry.is_directory())) {
                             if (!is_symlink(full_copy_to)) {
+                                is_correct_types = false;
+                            }
+                        } else if (!entry.is_symlink()) {
+                            if (is_symlink(full_copy_to)) {
                                 is_correct_types = false;
                             }
                         }
