@@ -100,6 +100,10 @@ int main() {
                 : current_panel->edit_permissions(left_panel);
                 break;
             }
+            case 'i' : {
+                current_panel->analysis_selected_file();
+                break;
+            }
             case 'h' : {
                 create_history_panel();
                 break;

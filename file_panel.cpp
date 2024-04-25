@@ -24,27 +24,37 @@ void file_panel::read_current_dir() {
         char date[25];
         std::strftime(date, sizeof(date), "%D %H:%M", std::gmtime(&st.st_mtim.tv_sec));
         CONTENT_TYPE content_type;
+        COLOR_INDEX color_index;
         if ((st.st_mode & S_IFMT) == S_IFDIR) {
             content_type = CONTENT_TYPE::IS_DIR;
+            color_index = MAGENTA_COLOR;
         } else if ((st.st_mode & S_IFMT) == S_IFLNK) {
-            bool flag_dir = false;
-            char target_path[PATH_MAX];
-            ssize_t len = readlink(full_path.c_str(), target_path, sizeof(target_path));
-            if (len != -1) {
-                target_path[len] = '\0';
-                lstat(target_path, &st);
-                if ((st.st_mode & S_IFMT) == S_IFDIR) {
-                    content_type = CONTENT_TYPE::IS_LNK_TO_DIR;
-                    flag_dir = true;
-                }
+            std::filesystem::path link_p(full_path);
+            std::filesystem::path link_target = std::filesystem::read_symlink(link_p);
+            if (!std::filesystem::exists(link_target)) {
+                content_type = CONTENT_TYPE::IS_HANGING_LINK;
+                color_index = RED_COLOR;
             }
-            if (!flag_dir) {
+            else if (is_symlink(link_p) && is_directory(link_p)) {
+                content_type = CONTENT_TYPE::IS_LNK_TO_DIR;
+                color_index = MAGENTA_COLOR;
+            } else {
                 content_type = CONTENT_TYPE::IS_LNK;
+                color_index = WHITE_COLOR;
             }
         } else if ((st.st_mode & S_IFMT) == S_IFREG) {
             content_type = CONTENT_TYPE::IS_REG;
-        }
-        content.emplace_back(buffer, date, size, content_type);
+            std::filesystem::path reg_path(full_path);
+            std::filesystem::path p = reg_path.extension();
+            if (p == ".tmp") {
+                color_index = BLUE_COLOR;
+            } else if (p == ".txt") {
+                color_index = YELLOW_COLOR;
+            } else if (p == ".c" || p == ".cpp" || p == ".h" || p == ".hpp") {
+                color_index = GREEN_COLOR;
+            } else color_index = WHITE_COLOR;
+         }
+        content.emplace_back(buffer, date, size, content_type, color_index);
     }
     std::sort(content.begin(), content.end(),
               [](const info &first, const info &second) {
@@ -102,9 +112,8 @@ void file_panel::display_content() {
         }
         mvwprintw(win, static_cast<int>(ind_offset), 1, "%*s", (COLS / 2) - 2, " ");
 
-        if ((content[i].content_type == CONTENT_TYPE::IS_DIR || content[i].content_type == CONTENT_TYPE::IS_LNK_TO_DIR)
-            && ((current_ind != ind_offset - 2 + start_index) || !active_panel)) {
-            wattron(win, COLOR_PAIR(3));
+        if (((current_ind != ind_offset - 2 + start_index) || !active_panel)) {
+            wattron(win, COLOR_PAIR(content[i].color_index));
         }
         std::string output_string = content[i].name_content;
         convert_to_output(output_string, content[i].content_type);
@@ -481,11 +490,26 @@ void file_panel::copy_content(file_panel &_other_panel) {
                                    message.length() + 2);
                 return;
             }
+
+            std::string full_from = copy_path_from.string();
+            if (full_from.length() <= path.length()) {
+                std::string substr = path.substr(0, full_from.length());
+                if (substr == full_from) {
+                    display_content();
+                    _other_panel.display_content();
+                    std::string message = "Can't copy content, FROM path consist TO path";
+                    create_error_panel(" Copy recursive error ", message, HEIGHT_FUNCTIONAL_PANEL - 2,
+                                       WEIGHT_FUNCTIONAL_PANEL > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
+                                       message.length() + 2);
+                    return;
+                }
+            }
+
             //+is_dir
-            if (((std::filesystem::status(copy_path_from).permissions() & std::filesystem::perms::owner_read) ==
+            if ((is_directory(copy_path_from)) && ((std::filesystem::status(copy_path_from).permissions() & std::filesystem::perms::owner_read) ==
                 std::filesystem::perms::none
                 || (std::filesystem::status(copy_path_from).permissions() & std::filesystem::perms::owner_exec) ==
-                   std::filesystem::perms::none) && (is_directory(copy_path_from))) {
+                   std::filesystem::perms::none)) {
                 display_content();
                 _other_panel.display_content();
                 std::string message = "Cannot copy from '" + copy_path_from.string() + "'";
@@ -495,6 +519,7 @@ void file_panel::copy_content(file_panel &_other_panel) {
                                    ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
                 return;
             }
+
 
             if ((std::filesystem::status(copy_path_to).permissions() & std::filesystem::perms::owner_write)
                 == std::filesystem::perms::none) {
@@ -627,12 +652,9 @@ void file_panel::overwrite_content_copy(file_panel &_other_panel, std::filesyste
     if (!exists((_to / content[current_ind].name_content))) {
         std::filesystem::create_directory(_to / content[current_ind].name_content);
     }
-    size_t pop = 0;
-    size_t push = 0;
     size_t index = _from.string().rfind(content[current_ind].name_content);
     while (!dir_stack.empty()) {
         std::filesystem::path current_path = dir_stack.top();
-        pop++;
         dir_stack.pop();
         for (const auto &entry: std::filesystem::directory_iterator(current_path, std::filesystem::directory_options::skip_permission_denied)) {
             std::string path_string = entry.path().string();
@@ -713,7 +735,6 @@ void file_panel::overwrite_content_copy(file_panel &_other_panel, std::filesyste
                 }
             }
             if (!flag_skip && entry.is_directory()) {
-                push++;
                 dir_stack.push(entry.path());
             }
         }
@@ -750,6 +771,21 @@ void file_panel::move_content(file_panel& _other_panel) {
                                    message.length() + 2);
                 return;
             }
+
+            std::string full_from = move_from.string();
+            if (full_from.length() <= path_to_move.length()) {
+                std::string substr = path_to_move.substr(0, full_from.length());
+                if (substr == full_from) {
+                    display_content();
+                    _other_panel.display_content();
+                    std::string message = "Can't copy content, FROM path consist TO path";
+                    create_error_panel(" Copy recursive error ", message, HEIGHT_FUNCTIONAL_PANEL - 2,
+                                       WEIGHT_FUNCTIONAL_PANEL > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
+                                       message.length() + 2);
+                    return;
+                }
+            }
+
             //after deleting last -> cursor > content.size()
             if (!exists(move_to_full)) {
                 try {
@@ -915,77 +951,50 @@ void file_panel::edit_permissions(file_panel &_other_panel) {
             }
         }
     }
-
 }
 
 void file_panel::delete_content(file_panel &_other_panel) {
     if (content[current_ind].name_content == "..") {
         return;
     }
-    std::filesystem::path p(current_directory + "/" + content[current_ind].name_content);
+    std::string current_path = current_directory + "/" + content[current_ind].name_content;
+    std::filesystem::path p(current_path);
     REMOVE_TYPE type;
-    bool flag_permission_read;
-    try {
-        flag_permission_read = std::filesystem::is_empty(p);
-    } catch (std::filesystem::filesystem_error &e) {
-        int error_ind = e.code().value();
-        if (error_ind == 13) {
-            generate_permission_error(e);
-        }
-        return;
-    }
-    if (is_directory(p) && !flag_permission_read) {
-        std::string message = "Delete: " + p.string();
-        type = create_remove_panel(HEADER_DELETE, message, HEIGHT_FUNCTIONAL_PANEL - 2,
-                                   WEIGHT_FUNCTIONAL_PANEL - 1 > message.length() ? WEIGHT_FUNCTIONAL_PANEL :
-                                   message.length() + 2);
+    bool flag_permission_read = true;
+    if (is_directory(p) && !is_symlink(p)) {
         try {
-            if (type == REMOVE_TYPE::REMOVE_ALL) {
-                if (is_symlink(p)) {
-                    std::filesystem::remove(p);
-                } else {
-                    sequential_removing(p, _other_panel, true);
-                }
-                read_current_dir();
-                bool is_end = false;
-                if (current_ind >= content.size()) {
-                    current_ind = content.size() - 1;
-                    is_end = true;
-                }
-                if (_other_panel.current_directory == current_directory) {
-                    _other_panel.read_current_dir();
-                    if (is_end) {
-                        _other_panel.current_ind = _other_panel.content.size() - 1;
-                    }
-                }
-                return;
-            }
+            flag_permission_read = std::filesystem::is_empty(p);
         } catch (std::filesystem::filesystem_error &e) {
             int error_ind = e.code().value();
             if (error_ind == 13) {
                 generate_permission_error(e);
             }
+            return;
         }
-        if (type == REMOVE_TYPE::REMOVE_THIS) {
-            display_content();
-            _other_panel.display_content();
-            sequential_removing(p, _other_panel, false);
-            if (!std::filesystem::exists(p)) {
-                read_current_dir();
-                bool is_end = false;
-                if (current_ind >= content.size()) {
-                    current_ind = content.size() - 1;
-                    is_end = true;
-                }
-                if (_other_panel.current_directory == current_directory) {
-                    _other_panel.read_current_dir();
-                    if (is_end) {
-                        _other_panel.current_ind = _other_panel.content.size() - 1;
+    }
+    if ((is_directory(p) && !is_symlink(p)) && !flag_permission_read) {
+        sequential_removing(p, _other_panel, false);
+        if (!std::filesystem::exists(_other_panel.current_directory + "/" + _other_panel
+                .content[_other_panel.current_ind].name_content)) {
+            if (_other_panel.current_directory.length() >= current_path.length()) {
+                std::string substr = _other_panel.current_directory.substr(0, current_path.length());
+                if (substr == current_path) {
+                    //_other_panel.current_directory = current_directory;
+                    std::filesystem::path new_path(_other_panel.current_directory);
+                    while(!exists(new_path)) {
+                        new_path = new_path.parent_path();
                     }
+                    _other_panel.current_directory = new_path.string();
                 }
             }
-        } else {
-            return;
+        }
+        read_current_dir();
+        _other_panel.read_current_dir();
+        if (current_ind >= content.size()) {
+            current_ind = content.size() - 1;
+        }
+        if (_other_panel.current_ind >= _other_panel.content.size()) {
+            _other_panel.current_ind = _other_panel.content.size() - 1;
         }
     } else {
         type = create_remove_panel(HEADER_DELETE, "Delete: " + content[current_ind].name_content,
@@ -993,18 +1002,21 @@ void file_panel::delete_content(file_panel &_other_panel) {
                                    WEIGHT_FUNCTIONAL_PANEL);
         if (type == REMOVE_TYPE::REMOVE_ALL || type == REMOVE_TYPE::REMOVE_THIS) {
             try {
+                bool is_dir = false;
+                if (is_directory(p)) {
+                    is_dir = true;
+                }
                 std::filesystem::remove(p);
+                if (is_dir) {
+                    _other_panel.current_directory = current_directory;
+                }
                 read_current_dir();
-                bool is_end = false;
+                _other_panel.read_current_dir();
                 if (current_ind >= content.size()) {
                     current_ind = content.size() - 1;
-                    is_end = true;
                 }
-                if (_other_panel.current_directory == current_directory) {
-                    _other_panel.read_current_dir();
-                    if (is_end) {
-                        _other_panel.current_ind = _other_panel.content.size() - 1;
-                    }
+                if (_other_panel.current_ind >= _other_panel.content.size()) {
+                    _other_panel.current_ind = _other_panel.content.size() - 1;
                 }
             } catch (std::filesystem::filesystem_error &e) {
                 int error_ind = e.code().value();
@@ -1015,7 +1027,6 @@ void file_panel::delete_content(file_panel &_other_panel) {
         }
     }
 }
-
 
 void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_other_panel, bool _all) {
     try {
@@ -1043,6 +1054,7 @@ void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_oth
         dir_stack.pop();
         for (const auto &entry: std::filesystem::directory_iterator(current_path,
                                                                     std::filesystem::directory_options::skip_permission_denied)) {
+            //bool delete_empty_subdir = false;
             if (!flag_delete_other) {
                 std::string message = "Delete: " + entry.path().string().substr(index);
                 type = create_remove_panel(HEADER_DELETE, message, HEIGHT_FUNCTIONAL_PANEL - 2,
@@ -1075,9 +1087,19 @@ void file_panel::sequential_removing(std::filesystem::path &_p, file_panel &_oth
             }
         }
     }
-    if (flag_delete_other) {
-        if (std::filesystem::is_empty(_p)) {
+    if (std::filesystem::is_empty(_p)) {
+        if (flag_delete_other) {
             std::filesystem::remove(_p);
+        } else {
+            display_content();
+            _other_panel.display_content();
+            std::string message = "Delete: " + _p.string().substr(index);
+            type = create_remove_panel(HEADER_DELETE, message, HEIGHT_FUNCTIONAL_PANEL - 2,
+                                       WEIGHT_FUNCTIONAL_PANEL - 1 > message.length()
+                                       ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
+            if (type == REMOVE_TYPE::REMOVE_ALL || type == REMOVE_TYPE::REMOVE_THIS) {
+                std::filesystem::remove(_p);
+            }
         }
     }
 }
@@ -1213,11 +1235,13 @@ void generate_incompatible_error(std::filesystem::filesystem_error &e) {
 info::info(std::string_view _name_content,
            std::string_view _last_redact_content,
            ssize_t _current_ind,
-           CONTENT_TYPE _content_type) {
+           CONTENT_TYPE _content_type,
+           COLOR_INDEX _color_index) {
     this->content_type = _content_type;
     this->name_content = _name_content;
     this->last_redact_content = _last_redact_content;
     this->size_content = _current_ind;
+    this->color_index = _color_index;
 }
 
 WINDOW *create_functional_panel(const std::string &_header, int height, int weight) {
@@ -1460,6 +1484,13 @@ void init_colors() {
     init_pair(9, COLOR_WHITE, COLOR_RED);
     init_pair(10, COLOR_YELLOW, COLOR_BLUE);
     init_pair(11, COLOR_YELLOW, COLOR_BLUE);
+
+    init_pair(WHITE_COLOR, COLOR_WHITE, COLOR_BLACK);
+    init_pair(GREEN_COLOR, COLOR_GREEN, COLOR_BLACK);
+    init_pair(YELLOW_COLOR, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(BLUE_COLOR, COLOR_BLUE, COLOR_BLACK);
+    init_pair(MAGENTA_COLOR, COLOR_MAGENTA, COLOR_BLACK);
+    init_pair(RED_COLOR, COLOR_RED, COLOR_BLACK);
 }
 
 void move_cursor_left_from_input_field(size_t *_current_index, int *_current_offset_field) {
@@ -1844,6 +1875,9 @@ void convert_to_output(std::string &_name, CONTENT_TYPE _type) {
             _name.insert(0, 1, '~');
             break;
         }
+        case CONTENT_TYPE::IS_HANGING_LINK : {
+            _name.insert(0, 1, '!');
+        }
         default :
             break;
     }
@@ -1934,4 +1968,98 @@ void history_pagination(size_t _direction, size_t _height, size_t &_start, size_
 void refresh_history_panel(WINDOW *_win) {
     wrefresh(_win);
     refresh();
+}
+
+void file_panel::analysis_selected_file() {
+    clear();
+    refresh();
+    WINDOW* info_win = newwin(LINES, COLS, 0, 0);
+    wattron(info_win, COLOR_PAIR(10));
+    mvwprintw(info_win, LINES - 1, 0, "%*s", COLS, " ");
+    mvwprintw(info_win, 0, 0, "%*s", COLS, " ");
+    std::string file_message = "Information about: '" + content[current_ind].name_content + "'";
+    std::string continue_message = "Press any button to continue";
+    mvwprintw(info_win, 0, static_cast<int>((COLS - file_message.length()) / 2), "%s", file_message.c_str());
+    mvwprintw(info_win, LINES - 1, static_cast<int>((COLS - continue_message.length()) / 2), "%s", continue_message.c_str());
+    wattroff(info_win, COLOR_PAIR(10));
+    int info_lines = 11;
+    int start = (LINES - info_lines) / 2;
+    std::string current_path_str = current_directory + "/" + content[current_ind].name_content;
+    std::filesystem::path current_path(current_directory + "/" + content[current_ind].name_content);
+    std::string type_and_name;
+    if (is_directory(current_path) && !is_symlink(current_path)) {
+        type_and_name += "Directory: ";
+    } else if (is_regular_file(current_path)) {
+        type_and_name += "Regular file: ";
+    } else if (is_character_file(current_path)) {
+        type_and_name += "Character file: ";
+    } else if (is_fifo(current_path)) {
+        type_and_name += "Fifo: ";
+    } else if (is_block_file(current_path)) {
+        type_and_name += "Block file: ";
+    } else if (is_socket(current_path)) {
+        type_and_name += "Socket: ";
+    } else if (is_directory(current_path) && is_symlink(current_path)) {
+        type_and_name += "Directory symlink: ";
+    } else if (is_symlink(current_path)) {
+        type_and_name += "Symlink: ";
+    } else {
+        type_and_name += "Unknown type: ";
+    }
+
+    struct stat sb {};
+    lstat(current_path_str.c_str(), &sb);
+    std::string path_str = "Path: " + current_path_str;
+    std::string size_str = "Size: " + std::to_string(sb.st_size)
+            + " bytes / " + "Blocks: " + std::to_string(sb.st_blocks)
+            + " / " + "Block size: " + std::to_string(sb.st_blksize) + " bytes";
+
+    std::filesystem::perms p = std::filesystem::status(current_path).permissions();
+    std::string perms;
+    auto parse_arg = [=](std::string &_buffer, char op, std::filesystem::perms perms) {
+        std::filesystem::perms::none == (perms & p) ? _buffer.push_back('-') : _buffer.push_back(op);
+    };
+
+    parse_arg(perms, 'r', std::filesystem::perms::owner_read);
+    parse_arg(perms, 'w', std::filesystem::perms::owner_write);
+    parse_arg(perms, 'x', std::filesystem::perms::owner_exec);
+    parse_arg(perms, 'r', std::filesystem::perms::group_read);
+    parse_arg(perms, 'w', std::filesystem::perms::group_write);
+    parse_arg(perms, 'x', std::filesystem::perms::group_exec);
+    parse_arg(perms, 'r', std::filesystem::perms::others_read);
+    parse_arg(perms, 'w', std::filesystem::perms::others_write);
+    parse_arg(perms, 'x', std::filesystem::perms::others_exec);
+
+    std::string mode_str = "Mode: " + perms + " (" +  + ")";
+
+
+    std::string link_str = "Links: " + std::to_string(sb.st_nlink);
+    getpwuid(sb.st_uid);
+    auto uid_name = getpwuid(sb.st_uid);
+    auto gid_name = getgrgid(sb.st_gid);
+    std::string uid_name_str;
+    std::string id_str = "User ID: " +  std::string(uid_name->pw_name) + " (" + std::to_string(sb.st_uid) + ") / "
+            + "Group id: " + std::string(gid_name->gr_name) + " (" + std::to_string(sb.st_gid) + ")";
+    char date[25];
+
+    strftime(date, sizeof(date), "%D %H:%M:%S", std::gmtime(&sb.st_atim.tv_sec));
+    std::string last_access = "Last access: " + std::string(date);
+    strftime(date, sizeof(date), "%D %H:%M:%S", std::gmtime(&sb.st_ctim.tv_sec));
+    std::string last_change = "Last change: " + std::string(date);
+    strftime(date, sizeof(date), "%D %H:%M:%S", std::gmtime(&sb.st_mtim.tv_sec));
+    std::string last_modification = "Last modification: " + std::string(date);
+    int len = static_cast<int>((COLS - path_str.length()) / 2);
+    type_and_name += content[current_ind].name_content;
+    mvwprintw(info_win, start++, len, "%s", type_and_name.c_str());
+    mvwprintw(info_win, start++, len, "%s", path_str.c_str());
+    mvwprintw(info_win, start++, len, "%s", size_str.c_str());
+    mvwprintw(info_win, start++, len, "%s", mode_str.c_str());
+    mvwprintw(info_win, start++, len, "%s", link_str.c_str());
+    mvwprintw(info_win, start++, len, "%s", id_str.c_str());
+    mvwprintw(info_win, start++, len, "%s", last_access.c_str());
+    mvwprintw(info_win, start++, len, "%s", last_change.c_str());
+    mvwprintw(info_win, start++, len, "%s", last_modification.c_str());
+    wrefresh(info_win);
+    getch();
+    delwin(info_win);
 }

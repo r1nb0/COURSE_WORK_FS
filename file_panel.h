@@ -13,6 +13,8 @@
 #include <filesystem>
 #include <fstream>
 #include <stack>
+#include <pwd.h>
+#include <grp.h>
 
 #define DATE_LEN 16
 #define LEN_LINE_FIRST 36
@@ -56,6 +58,16 @@ enum class CONTENT_TYPE {
     IS_LNK_TO_DIR = 1,
     IS_LNK = 2,
     IS_REG = 3,
+    IS_HANGING_LINK = 4,
+};
+
+enum COLOR_INDEX : short {
+    WHITE_COLOR = 14,
+    GREEN_COLOR = 15,
+    YELLOW_COLOR = 16,
+    BLUE_COLOR = 17,
+    MAGENTA_COLOR = 18,
+    RED_COLOR = 19,
 };
 
 enum class REMOVE_TYPE {
@@ -77,10 +89,12 @@ struct info {
     std::string last_redact_content;
     CONTENT_TYPE content_type;
     ssize_t size_content;
+    COLOR_INDEX color_index;
 
     info(std::string_view _name_content,
          std::string_view _last_redact_content,
-         ssize_t _current_ind, CONTENT_TYPE _content_type);
+         ssize_t _current_ind, CONTENT_TYPE _content_type,
+         COLOR_INDEX _color_index);
 };
 
 class file_panel {
@@ -123,6 +137,7 @@ public :
     void rename_content(file_panel& _other_panel);
     void overwrite_content_copy(file_panel& _other_panel, std::filesystem::path& _from, std::filesystem::path& _to, bool _all);
     void overwrite_content_move(file_panel& _other_panel, std::filesystem::path& _from, std::filesystem::path& _to);
+    void analysis_selected_file();
 };
 
 void generate_incompatible_error(std::filesystem::filesystem_error& e);
