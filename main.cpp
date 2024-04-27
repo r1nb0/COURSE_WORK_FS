@@ -104,6 +104,10 @@ int main() {
                 current_panel->analysis_selected_file();
                 break;
             }
+            case 'f' : {
+                filesystem_info_mount();
+                break;
+            }
             case 'h' : {
                 create_history_panel();
                 break;

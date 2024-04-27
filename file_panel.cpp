@@ -1982,6 +1982,8 @@ void file_panel::analysis_selected_file() {
     mvwprintw(info_win, 0, static_cast<int>((COLS - file_message.length()) / 2), "%s", file_message.c_str());
     mvwprintw(info_win, LINES - 1, static_cast<int>((COLS - continue_message.length()) / 2), "%s", continue_message.c_str());
     wattroff(info_win, COLOR_PAIR(10));
+
+    wattron(info_win, COLOR_PAIR(GREEN_COLOR));
     int info_lines = 11;
     int start = (LINES - info_lines) / 2;
     std::string current_path_str = current_directory + "/" + content[current_ind].name_content;
@@ -2041,13 +2043,28 @@ void file_panel::analysis_selected_file() {
     std::string id_str = "User ID: " +  std::string(uid_name->pw_name) + " (" + std::to_string(sb.st_uid) + ") / "
             + "Group id: " + std::string(gid_name->gr_name) + " (" + std::to_string(sb.st_gid) + ")";
     char date[25];
-
     strftime(date, sizeof(date), "%D %H:%M:%S", std::gmtime(&sb.st_atim.tv_sec));
     std::string last_access = "Last access: " + std::string(date);
     strftime(date, sizeof(date), "%D %H:%M:%S", std::gmtime(&sb.st_ctim.tv_sec));
     std::string last_change = "Last change: " + std::string(date);
     strftime(date, sizeof(date), "%D %H:%M:%S", std::gmtime(&sb.st_mtim.tv_sec));
     std::string last_modification = "Last modification: " + std::string(date);
+    std::string inode_str = "Inode: " + std::to_string(sb.st_ino);
+
+    std::string command = "df " + current_path_str;
+
+    std::shared_ptr<FILE> pipe(popen(command.c_str(), "r"), pclose);
+    char buffer[256];
+    std::vector<std::string> a;
+    while (!feof(pipe.get())) {
+        if (fgets(buffer, 256, pipe.get()) != nullptr) {
+            a.emplace_back(buffer);
+        }
+    }
+
+    std::string filesystem_name = a[1].substr(0, a[1].find(' '));
+    std::string file_system = "File system: " + filesystem_name + " (" + std::to_string(sb.st_dev) + ")";
+
     int len = static_cast<int>((COLS - path_str.length()) / 2);
     type_and_name += content[current_ind].name_content;
     mvwprintw(info_win, start++, len, "%s", type_and_name.c_str());
@@ -2059,7 +2076,62 @@ void file_panel::analysis_selected_file() {
     mvwprintw(info_win, start++, len, "%s", last_access.c_str());
     mvwprintw(info_win, start++, len, "%s", last_change.c_str());
     mvwprintw(info_win, start++, len, "%s", last_modification.c_str());
+    mvwprintw(info_win, start++, len, "%s", inode_str.c_str());
+    mvwprintw(info_win, start, len, "%s", file_system.c_str());
+    wattroff(info_win, COLOR_PAIR(GREEN_COLOR));
     wrefresh(info_win);
     getch();
+    werase(info_win);
+    wrefresh(info_win);
     delwin(info_win);
+}
+
+void filesystem_info_mount() {
+    clear();
+    refresh();
+    WINDOW* win = newwin(LINES, COLS, 0, 0);
+    wattron(win, COLOR_PAIR(10));
+    mvwprintw(win, LINES - 1, 0, "%*s", COLS, " ");
+    mvwprintw(win, 0, 0, "%*s", COLS, " ");
+    std::string file_message = "Information about filesystem";
+    std::string continue_message = "Press any button to continue";
+    mvwprintw(win, 0, static_cast<int>((COLS - file_message.length()) / 2), "%s", file_message.c_str());
+    mvwprintw(win, LINES - 1, static_cast<int>((COLS - continue_message.length()) / 2), "%s", continue_message.c_str());
+    wattroff(win, COLOR_PAIR(10));
+
+
+    std::vector<std::string> a;
+    std::string command = "df -h";
+    std::shared_ptr<FILE> pipe(popen(command.c_str(), "r"), pclose);
+    char buffer[256];
+    while(!feof(pipe.get())) {
+        if ((fgets(buffer, 256, pipe.get())) != nullptr) {
+            a.emplace_back(buffer);
+        }
+    }
+
+    int start = static_cast<int>((LINES - a.size()) / 2);
+    size_t max_len = 0;
+    for (size_t i = 1; i < a.size(); i++) {
+        if (a[i].length() > max_len) {
+            max_len = a[i].length();
+        }
+    }
+
+    int len = static_cast<int>((COLS - max_len) / 2);
+
+    wattron(win, COLOR_PAIR(RED_COLOR));
+    mvwprintw(win, start++, len, "%s", a[0].c_str());
+    wattroff(win, COLOR_PAIR(RED_COLOR));
+    wattron(win, COLOR_PAIR(GREEN_COLOR));
+    for (size_t i = 1; i < a.size(); i++) {
+        mvwprintw(win, start++, len, "%s", a[i].c_str());
+    }
+    wattroff(win, COLOR_PAIR(GREEN_COLOR));
+
+    wrefresh(win);
+    getch();
+    werase(win);
+    wrefresh(win);
+    delwin(win);
 }

@@ -15,6 +15,8 @@
 #include <stack>
 #include <pwd.h>
 #include <grp.h>
+#include <sys/vfs.h>
+#include <mntent.h>
 
 #define DATE_LEN 16
 #define LEN_LINE_FIRST 36
@@ -165,5 +167,6 @@ void create_history_panel();
 void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _start, size_t _current_ind);
 void history_pagination(size_t _direction, size_t _height, size_t& _start, size_t& _current_ind);
 void refresh_history_panel(WINDOW* _win);
+void filesystem_info_mount();
 
 #endif //COURSE_PROJECT_FILE_PANEL_H
