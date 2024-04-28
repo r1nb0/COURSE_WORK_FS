@@ -166,7 +166,16 @@ REMOVE_TYPE create_remove_panel(const std::string& _header, const std::string& d
 void create_history_panel();
 void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _start, size_t _current_ind);
 void history_pagination(size_t _direction, size_t _height, size_t& _start, size_t& _current_ind);
-void refresh_history_panel(WINDOW* _win);
+void refresh_sub_panel(WINDOW* _win);
 void filesystem_info_mount();
+bool create_find_panel(const std::string& _current_dir, std::string& _result);
+bool navigation_find_utility(WINDOW* _win, FORM* _form, FIELD** _fields, const std::string& _dir, std::string& _result);
+bool find_collect_results(const std::string& _current_dir, std::string& _query, std::vector<std::string>& _results);
+void find_utility(file_panel& _first, file_panel& _second, const std::string& _current_dir);
+void create_find_content_panel(std::vector<std::string>& _content);
+void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _start,
+                       size_t _current_ind, std::vector<std::string> &_content);
+void find_pagination(size_t _direction, size_t _height, size_t& _start,
+                     size_t& _current_ind, const std::vector<std::string>& _vec);
 
 #endif //COURSE_PROJECT_FILE_PANEL_H

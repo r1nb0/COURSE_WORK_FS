@@ -1717,6 +1717,238 @@ bool change_permissions_panel(const std::string &_header,
     return entry_flag;
 }
 
+
+void find_utility(file_panel& first, file_panel& second, const std::string& _current_dir) {
+    std::string _query;
+    _query.push_back('*');
+    bool flag_entry = create_find_panel(_current_dir, _query);
+    if (flag_entry) {
+        std::vector<std::string> results;
+        bool is_good_query = find_collect_results(_current_dir, _query, results);
+        if (is_good_query) {
+            first.display_content();
+            second.display_content();
+            create_find_content_panel(results);
+        }
+    }
+}
+
+void create_find_content_panel(std::vector<std::string>& _content) {
+    size_t max_len = 0;
+    for (const auto & it : _content) {
+        if (it.length() > max_len) {
+            max_len = it.length();
+        }
+    }
+    int height = 20;
+    int weight = max_len > WEIGHT_HISTORY_PANEL - 2 ? static_cast<int>(max_len) + 2 : WEIGHT_HISTORY_PANEL;
+    WINDOW* win = newwin(height, weight, (LINES - height) / 2, (COLS - weight) / 2);
+    wbkgd(win, COLOR_PAIR(6));
+    size_t current_ind = 0;
+    size_t start = 0;
+    find_show_content(win, height, weight, start, current_ind, _content);
+    bool flag_continue = true;
+    while(flag_continue) {
+        switch(getch()) {
+            case KEY_RESIZE : {
+                flag_continue = false;
+                break;
+            }
+            case KEY_DOWN : {
+                find_pagination(KEY_DOWN, height, start, current_ind, _content);
+                find_show_content(win, height, weight, start, current_ind, _content);
+                break;
+            }
+            case KEY_UP : {
+                find_pagination(KEY_UP, height, start, current_ind, _content);
+                find_show_content(win, height, weight, start, current_ind, _content);
+                break;
+            }
+            case '\n' : {
+                break;
+            }
+            case 'q' : {
+                flag_continue = false;
+                break;
+            }
+        }
+    }
+    delwin(win);
+}
+
+void find_pagination(size_t _direction, size_t _height, size_t &_start, size_t &_current_ind,
+                     const std::vector<std::string> &_content) {
+    if (_direction == KEY_UP) {
+        if (_current_ind == 0) {
+            _start = 0;
+        } else if (_current_ind != _start) {
+            _current_ind--;
+        } else {
+            _start -= _height - 2;
+            _current_ind--;
+        }
+    } else if (_direction == KEY_DOWN) {
+        if (_current_ind + 1 < _content.size()) {
+            if (_current_ind + 1 >= _height - 2 + _start) {
+                _start += _height - 2;
+            }
+            _current_ind++;
+        }
+    }
+}
+
+void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _start, size_t _current_ind, std::vector<std::string>& _content) {
+    werase(_win);
+    refresh();
+    box(_win, 0, 0);
+    wattron(_win, A_BOLD);
+    mvwprintw(_win, 0, static_cast<int>(_weight - (strlen(" Find content "))) / 2, "%s", " Find content ");
+
+    size_t offset = 1;
+    for (size_t i = _start; i < _content.size() && i < (_height - 2) + _start; i++) {
+        if (_current_ind == i) {
+            wattron(_win, A_REVERSE);
+        }
+        mvwprintw(_win, static_cast<int>(offset), 1, "%*s", static_cast<int>(_height - 2), " ");
+        mvwprintw(_win, static_cast<int>(offset), 1, "%s", _content[i].c_str());
+        wattroff(_win, A_REVERSE);
+        offset++;
+    }
+    refresh_sub_panel(_win);
+    wattroff(_win, A_BOLD);
+}
+
+bool find_collect_results(const std::string& _current_dir, std::string &_query, std::vector<std::string>& _results) {
+    if (_query[0] == '*') {
+        _query.erase(0, 1);
+        for (const auto &entry: std::filesystem::recursive_directory_iterator(_current_dir,
+                                                                              std::filesystem::directory_options::skip_permission_denied)) {
+            if (entry.path().extension() == _query) {
+                _results.push_back(entry.path());
+            }
+        }
+    } else {
+        for (const auto & entry : std::filesystem::recursive_directory_iterator(_current_dir,
+                                                                                std::filesystem::directory_options::skip_permission_denied)) {
+            if (entry.path().filename() == _query) {
+                _results.push_back(entry.path());
+            }
+        }
+    }
+    if (_results.empty()) {
+        return false;
+    }
+    return true;
+}
+
+bool create_find_panel(const std::string &_current_dir, std::string& _query) {
+    int height = HEIGHT_FUNCTIONAL_PANEL + 5;
+    int weight = WEIGHT_FUNCTIONAL_PANEL;
+    WINDOW* win = create_functional_panel(" Find util ", height, weight);
+    FIELD* fields[4];
+    fields[0] = new_field(1, LEN_LINE_FIRST, 4, ((weight - LEN_LINE_FIRST) / 2) - 1, 0, 0);
+    fields[1] = new_field(1, 6, height - 5, 17, 0, 0);
+    fields[2] = new_field(1, 6,  height - 5, 35, 0, 0);
+    fields[3] = nullptr;
+
+    FORM* my_form = new_form(fields);
+    set_form_win(my_form, win);
+    WINDOW *subwin = derwin(win, height - 4, weight - 2, 2, 1);
+    set_form_sub(my_form, subwin);
+    post_form(my_form);
+    wattron(subwin, A_BOLD | COLOR_PAIR(8));
+    mvwprintw(subwin, 3, ((weight - LEN_LINE_FIRST)) / 2 - 1, "%s", "Name/extension:");
+    wattron(subwin, A_BOLD | COLOR_PAIR(8));
+
+    set_field_back(fields[0], COLOR_PAIR(6) | A_BOLD);
+    set_field_back(fields[1], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[2], COLOR_PAIR(7) | A_BOLD);
+
+    set_field_buffer(fields[1], 0, OK_BUTTON);
+    set_field_buffer(fields[2], 0, NO_BUTTON);
+
+    wrefresh(win);
+    pos_form_cursor(my_form);
+    wrefresh(win);
+
+    bool entry_flag = navigation_find_utility(win, my_form, fields, _current_dir, _query);
+    for (size_t i = 0; i < 2; i++) {
+        free_field(fields[i]);
+    }
+    free_form(my_form);
+    delwin(subwin);
+    delwin(win);
+    return entry_flag;
+}
+
+bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
+                             const std::string& _dir, std::string &_query) {
+    int ch;
+    size_t current_index = 0;
+    int offset = 0;
+    size_t index_field = 0;
+    current_index = _query.length();
+    display_buffer_on_form(_form, _query, &current_index, offset);
+    wrefresh(_win);
+    while (true) {
+        switch (ch = getch()) {
+            case '\t': {
+                form_driver(_form, REQ_NEXT_FIELD);
+                index_field = field_index(current_field(_form));
+                if (index_field == 0) {
+                    set_field_back(_fields[2], COLOR_PAIR(7) | A_BOLD);
+                    curs_set(1);
+                } else if (index_field == 1) {
+                    set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
+                    curs_set(0);
+                } else {
+                    set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
+                    set_field_back(_fields[1], COLOR_PAIR(7) | A_BOLD);
+                    curs_set(0);
+                }
+                break;
+            }
+            case KEY_RESIZE : {
+                return false;
+            }
+            case '\n' : {
+                if (index_field == 1) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            case KEY_LEFT : {
+                if (is_input_field_dir_file(index_field)) {
+                    move_cursor_left_from_input_field(&current_index, &offset);
+                }
+                break;
+            }
+            case KEY_RIGHT : {
+                if (is_input_field_dir_file(index_field)) {
+                    move_cursor_right_from_input_field(_query.length(), &current_index, &offset);
+                }
+                break;
+            }
+            case KEY_BACKSPACE : {
+                if (is_input_field_dir_file(index_field)) {
+                    delete_char_from_input_field(_query, &current_index, &offset);
+                }
+                break;
+            }
+            default : {
+                if (is_input_field_dir_file(index_field)) {
+                    insert_char_from_input_field(_query, &current_index, &offset, ch);
+                }
+            }
+        }
+        if (is_input_field_dir_file(index_field)) {
+            display_buffer_on_form(_form, _query, &current_index, offset);
+        }
+        wrefresh(_win);
+    }
+}
+
 bool navigation_edit_permissions(WINDOW *_win, FORM *_form, FIELD **_fields, char_permissions &_perms) {
     int current_ind = -1;
     wrefresh(_win);
@@ -1891,7 +2123,7 @@ void create_history_panel() {
     int weight = history_vec.max_len > WEIGHT_HISTORY_PANEL - 2 ? static_cast<int>(history_vec.max_len) + 2 : WEIGHT_HISTORY_PANEL;
     int height = 15;
     WINDOW* win = newwin(height, weight, (LINES - height) / 2, (COLS - weight) / 2);
-    wbkgd(win, COLOR_PAIR(11));
+    wbkgd(win, COLOR_PAIR(6));
     size_t start = 0;
     size_t current_ind = 0;
     history_show_content(win, height, weight, start, current_ind);
@@ -1908,7 +2140,7 @@ void create_history_panel() {
                 break;
             }
             case KEY_UP : {
-                history_pagination(KEY_UP,  height, start, current_ind);
+                history_pagination(KEY_UP, height, start, current_ind);
                 history_show_content(win, height, weight, start, current_ind);
                 break;
             }
@@ -1930,7 +2162,6 @@ void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _
     box(_win, 0, 0);
     wattron(_win, A_BOLD);
     mvwprintw(_win, 0, static_cast<int>(_weight - (strlen(HISTORY_HEADER))) / 2, "%s", HISTORY_HEADER);
-    wattroff(_win, A_BOLD);
 
     size_t offset = 1;
     for (size_t i = _start; i < history_vec.history_path.size() && i < (_height - 2) + _start; i++) {
@@ -1942,7 +2173,8 @@ void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _
         wattroff(_win, A_REVERSE);
         offset++;
     }
-    refresh_history_panel(_win);
+    refresh_sub_panel(_win);
+    wattroff(_win, A_BOLD);
 }
 
 void history_pagination(size_t _direction, size_t _height, size_t &_start, size_t &_current_ind) {
@@ -1965,7 +2197,7 @@ void history_pagination(size_t _direction, size_t _height, size_t &_start, size_
     }
 }
 
-void refresh_history_panel(WINDOW *_win) {
+void refresh_sub_panel(WINDOW *_win) {
     wrefresh(_win);
     refresh();
 }

@@ -104,6 +104,10 @@ int main() {
                 current_panel->analysis_selected_file();
                 break;
             }
+            case 'o' : {
+                find_utility(left_panel, right_panel, current_panel->get_current_directory());
+                break;
+            }
             case 'f' : {
                 filesystem_info_mount();
                 break;
