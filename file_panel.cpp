@@ -1354,7 +1354,7 @@ bool navigation_symlink_create_panel(WINDOW *_win, FORM *_form, FIELD **_fields,
         offset_second_field = static_cast<int>(index_second_field) - LEN_LINE_FIRST + 1;
     }
     set_current_field(_form, _fields[1]);
-    display_buffer_on_form(_form, _pointer, &index_second_field, offset_second_field);
+    display_buffer_on_form(_form, _pointer, &index_second_field, offset_second_field, LEN_LINE_FIRST);
     set_current_field(_form, _fields[0]);
     wrefresh(_win);
 
@@ -1417,25 +1417,25 @@ bool navigation_symlink_create_panel(WINDOW *_win, FORM *_form, FIELD **_fields,
             default: {
                 if (is_input_field_link(index_field)) {
                     insert_char_from_input_field(*current_buffer, current_index,
-                                                 current_offset_field, ch);
+                                                 current_offset_field, ch, LEN_LINE_FIRST);
                 }
                 break;
             }
         }
         if (is_input_field_link(index_field)) {
             display_buffer_on_form(_form, *current_buffer, current_index,
-                                   *current_offset_field);
+                                   *current_offset_field, LEN_LINE_FIRST);
         }
         wrefresh(_win);
     }
 }
 
 void display_buffer_on_form(FORM *_form, const std::string &_buffer,
-                            const size_t *_ind, int _offset) {
-    if (_buffer.length() < LEN_LINE_FIRST - 1 + _offset) {
+                            const size_t *_ind, int _offset, size_t LEN_LINE) {
+    if (_buffer.length() < LEN_LINE - 1 + _offset) {
         set_field_buffer(current_field(_form), 0, _buffer.c_str());
     } else {
-        set_field_buffer(current_field(_form), 0, _buffer.substr(_offset, LEN_LINE_FIRST - 1).c_str());
+        set_field_buffer(current_field(_form), 0, _buffer.substr(_offset, LEN_LINE - 1).c_str());
     }
     for (size_t i = 0; i < *_ind - _offset; i++) {
         form_driver(_form, REQ_RIGHT_CHAR);
@@ -1464,10 +1464,10 @@ void delete_char_from_input_field(std::string &_current_buffer,
 void insert_char_from_input_field(std::string &_current_buffer,
                                   size_t *_current_index,
                                   int *_current_offset_field,
-                                  int ch) {
+                                  int ch, size_t LEN_LINE) {
     _current_buffer.insert(_current_buffer.begin() + static_cast<long>(*_current_index), static_cast<char>(ch));
     (*_current_index)++;
-    if (*_current_index > LEN_LINE_FIRST - 1 + *_current_offset_field) {
+    if (*_current_index > LEN_LINE - 1 + *_current_offset_field) {
         (*_current_offset_field)++;
     }
 }
@@ -1962,13 +1962,23 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
                              char_permissions& _str_perms,
                              std::string &_query) {
     int ch;
-    size_t current_index = 0;
 
-    int offset = 0;
+    size_t query_index = _query.length();
+    size_t min_size_index = 0;
+    size_t max_size_index = 0;
+
+    int query_offset = 0;
+    int min_size_offset = 0;
+    int max_size_offset = 0;
+
+    std::string* current_buffer = &_query;
+
+    size_t* current_index = &query_index;
+    int* current_offset = &query_offset;
+
     size_t index_field = 0;
-    current_index = _query.length();
 
-    display_buffer_on_form(_form, _query, &current_index, offset);
+    display_buffer_on_form(_form, _query, current_index, query_offset, LEN_LINE_FIRST);
     wrefresh(_win);
     while (true) {
         switch (ch = getch()) {
@@ -1976,15 +1986,28 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
                 form_driver(_form, REQ_NEXT_FIELD);
                 index_field = field_index(current_field(_form));
                 if (index_field == 0) {
-                    set_field_back(_fields[2], COLOR_PAIR(7) | A_BOLD);
+                    current_buffer = &_query;
+                    current_index = &query_index;
+                    current_offset = &query_offset;
                     curs_set(1);
                 } else if (index_field == 1) {
                     set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
                     curs_set(0);
-                } else {
+                } else if (index_field == 2 || index_field == 3
+                || index_field == 4 || index_field == 5 || index_field == 6
+                || index_field == 7 || index_field == 8) {
                     set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
-                    set_field_back(_fields[1], COLOR_PAIR(7) | A_BOLD);
-                    curs_set(0);
+                    set_field_back(_fields[index_field - 1], COLOR_PAIR(7) | A_BOLD);
+                } else if (index_field == 9) {
+                    set_field_back(_fields[index_field - 1], COLOR_PAIR(7) | A_BOLD);
+                    curs_set(1);
+                    current_buffer = &_min_size;
+                    current_index = &min_size_index;
+                    current_offset = &min_size_offset;
+                } else {
+                    current_buffer = &_max_size;
+                    current_index = &max_size_index;
+                    current_offset = &max_size_offset;
                 }
                 break;
             }
@@ -2000,30 +2023,38 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
             }
             case KEY_LEFT : {
                 if (is_input_field_dir_file(index_field)) {
-                    move_cursor_left_from_input_field(&current_index, &offset);
+                    move_cursor_left_from_input_field(current_index, current_offset);
                 }
                 break;
             }
             case KEY_RIGHT : {
                 if (is_input_field_dir_file(index_field)) {
-                    move_cursor_right_from_input_field(_query.length(), &current_index, &offset);
+                    move_cursor_right_from_input_field(current_buffer->length(), current_index, current_offset);
                 }
                 break;
             }
             case KEY_BACKSPACE : {
-                if (is_input_field_dir_file(index_field)) {
-                    delete_char_from_input_field(_query, &current_index, &offset);
+                if (is_input_field_find(index_field)) {
+                    delete_char_from_input_field(*current_buffer, current_index, current_offset);
                 }
                 break;
             }
             default : {
-                if (is_input_field_dir_file(index_field)) {
-                    insert_char_from_input_field(_query, &current_index, &offset, ch);
+                if (is_input_field_find(index_field)) {
+                    if (index_field == 9 || index_field == 10) {
+                        insert_char_from_input_field(*current_buffer, current_index, current_offset, ch, 7);
+                    } else {
+                        insert_char_from_input_field(*current_buffer, current_index, current_offset, ch, LEN_LINE_FIRST);
+                    }
                 }
             }
         }
-        if (is_input_field_dir_file(index_field)) {
-            display_buffer_on_form(_form, _query, &current_index, offset);
+        if (is_input_field_find(index_field)) {
+            if (index_field == 9 || index_field == 10) {
+                display_buffer_on_form(_form, *current_buffer, current_index, *current_offset, 7);
+            } else {
+                display_buffer_on_form(_form, *current_buffer, current_index, *current_offset, LEN_LINE_FIRST);
+            }
         }
         wrefresh(_win);
     }
@@ -2104,7 +2135,7 @@ bool navigation_functional_create_redact_panel(WINDOW *_win, FORM *_form,
             offset = static_cast<int>(_result.length()) - LEN_LINE_FIRST + 1;
         }
         current_index = _result.length();
-        display_buffer_on_form(_form, _result, &current_index, offset);
+        display_buffer_on_form(_form, _result, &current_index, offset, LEN_LINE_FIRST);
         wrefresh(_win);
     }
     while (true) {
@@ -2155,12 +2186,12 @@ bool navigation_functional_create_redact_panel(WINDOW *_win, FORM *_form,
             }
             default : {
                 if (is_input_field_dir_file(index_field)) {
-                    insert_char_from_input_field(_result, &current_index, &offset, ch);
+                    insert_char_from_input_field(_result, &current_index, &offset, ch, LEN_LINE_FIRST);
                 }
             }
         }
         if (is_input_field_dir_file(index_field)) {
-            display_buffer_on_form(_form, _result, &current_index, offset);
+            display_buffer_on_form(_form, _result, &current_index, offset, LEN_LINE_FIRST);
         }
         wrefresh(_win);
     }
@@ -2446,4 +2477,11 @@ void filesystem_info_mount() {
     werase(win);
     wrefresh(win);
     delwin(win);
+}
+
+bool is_input_field_find(size_t _index) {
+    if (_index == 0 || _index == 9 || _index == 10) {
+        return true;
+    }
+    return false;
 }

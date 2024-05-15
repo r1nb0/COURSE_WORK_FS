@@ -149,7 +149,8 @@ void init_colors();
 void convert_to_output(std::string& _name, CONTENT_TYPE _type);
 void move_cursor_right_from_input_field(size_t len, size_t* _current_index, int* _current_offset_field);
 void move_cursor_left_from_input_field(size_t* _current_index, int* _current_offset_field);
-void insert_char_from_input_field(std::string& _current_buffer, size_t* _current_index, int* _current_offset_field, int ch);
+void insert_char_from_input_field(std::string& _current_buffer, size_t* _current_index,
+                                  int* _current_offset_field, int ch, size_t LEN_LINE);
 void delete_char_from_input_field(std::string& _current_buffer, size_t* _current_index, int* _offset_field);
 bool is_input_field_link(size_t _index);
 bool is_input_field_dir_file(size_t _index);
@@ -159,7 +160,7 @@ bool navigation_functional_create_redact_panel(WINDOW* _win, FORM* _form, FIELD*
 bool navigation_symlink_create_panel(WINDOW* _win, FORM* _form, FIELD** _fields, std::string& _namelink, std::string& _pointer);
 bool navigation_edit_permissions(WINDOW* _win, FORM* _form, FIELD** _fields, char_permissions& _perms);
 REMOVE_TYPE navigation_remove(WINDOW* _win, FORM* _form, FIELD** _fields);
-void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_t* _ind, int _offset);
+void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_t* _ind, int _offset, size_t LEN_LINE);
 void create_error_panel(const std::string& _header, const std::string& _message, int height, int weight);
 bool change_permissions_panel(const std::string& _header, const std::string& _description, int height, int weight, char_permissions& _perms);
 REMOVE_TYPE create_remove_panel(const std::string& _header, const std::string& description, int height, int weight);
@@ -181,5 +182,7 @@ void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _sta
                        size_t _current_ind, std::vector<std::string> &_content);
 void find_pagination(size_t _direction, size_t _height, size_t& _start,
                      size_t& _current_ind, const std::vector<std::string>& _vec);
+
+bool is_input_field_find(size_t _index);
 
 #endif //COURSE_PROJECT_FILE_PANEL_H
