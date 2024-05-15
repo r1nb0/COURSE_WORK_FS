@@ -1842,14 +1842,27 @@ bool find_collect_results(const std::string& _current_dir, std::string &_query, 
 }
 
 bool create_find_panel(const std::string &_current_dir, std::string& _query) {
-    int height = HEIGHT_FUNCTIONAL_PANEL + 5;
+    int height = HEIGHT_FUNCTIONAL_PANEL + 9;
     int weight = WEIGHT_FUNCTIONAL_PANEL;
     WINDOW* win = create_functional_panel(" Find util ", height, weight);
-    FIELD* fields[4];
-    fields[0] = new_field(1, LEN_LINE_FIRST, 4, ((weight - LEN_LINE_FIRST) / 2) - 1, 0, 0);
+    FIELD* fields[12];
+    int left_offset = (weight - LEN_LINE_FIRST) / 2 - 1;
+    fields[0] = new_field(1, LEN_LINE_FIRST, 2, left_offset, 0, 0);
     fields[1] = new_field(1, 6, height - 5, 17, 0, 0);
-    fields[2] = new_field(1, 6,  height - 5, 35, 0, 0);
-    fields[3] = nullptr;
+    fields[2] = new_field(1, 6, height - 5, 35, 0, 0);
+
+    fields[3] = new_field(1, 3, 5, left_offset + 1 + 8, 0, 0);      //permissions
+    fields[4] = new_field(1, 3, 5, left_offset + 8 + 8, 0, 0);
+    fields[5] = new_field(1, 3, 5, left_offset + 15 + 8, 0, 0);
+
+    fields[6] = new_field(1, 1, 8, left_offset + 1 + 8, 0, 0);          //types
+    fields[7] = new_field(1, 1, 8, left_offset + 6 + 8, 0, 0);
+    fields[8] = new_field(1, 1, 8, left_offset + 11 + 8, 0, 0);
+
+    fields[9] = new_field(1, 7, 11, left_offset + 8, 0, 0);         //size
+    fields[10] = new_field(1, 7, 11, left_offset + 19, 0, 0);
+
+    fields[11] = nullptr;
 
     FORM* my_form = new_form(fields);
     set_form_win(my_form, win);
@@ -1857,24 +1870,84 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query) {
     set_form_sub(my_form, subwin);
     post_form(my_form);
     wattron(subwin, A_BOLD | COLOR_PAIR(8));
-    mvwprintw(subwin, 3, ((weight - LEN_LINE_FIRST)) / 2 - 1, "%s", "Name/extension:");
-    wattron(subwin, A_BOLD | COLOR_PAIR(8));
+    mvwprintw(subwin, 1, left_offset, "%s", "Name/extension:");
+
+
+
+    mvwprintw(subwin, 5, left_offset, "%s", "Perms:");
+    mvwprintw(subwin, 8, left_offset, "%s", "Types:");
+    mvwprintw(subwin, 11, left_offset, "%s", "Size:");
+
+    wattroff(subwin, A_BOLD | COLOR_PAIR(8));
+
+    wattron(subwin, COLOR_PAIR(7) | A_BOLD);
+
+    mvwprintw(subwin, 4, left_offset + 8, "%s", "owner");
+    mvwprintw(subwin, 4, left_offset + 7 + 8, "%s", "group");
+    mvwprintw(subwin, 4, left_offset + 14 + 8, "%s", "other");
+
+    mvwprintw(subwin, 7, left_offset + 8, "%s", "dir");
+    mvwprintw(subwin, 7, left_offset + 5 + 8, "%s", "reg");
+    mvwprintw(subwin, 7, left_offset + 10 + 8, "%s", "lnk");
+
+    mvwprintw(subwin, 5, left_offset + 8, "%s", "[   ]");
+    mvwprintw(subwin, 5, left_offset + 7 + 8, "%s", "[   ]");
+    mvwprintw(subwin, 5, left_offset + 14 + 8, "%s", "[   ]");
+
+    mvwprintw(subwin, 8, left_offset + 8, "%s", "[ ]");
+    mvwprintw(subwin, 8, left_offset + 5 + 8, "%s", "[ ]");
+    mvwprintw(subwin, 8, left_offset + 9 + 8, " %s", "[ ]");
+
+    mvwprintw(subwin, 11, left_offset + 19 - 3, "%s", "to");
+
+    wattroff(subwin, COLOR_PAIR(7) | A_BOLD);
 
     set_field_back(fields[0], COLOR_PAIR(6) | A_BOLD);
     set_field_back(fields[1], COLOR_PAIR(7) | A_BOLD);
     set_field_back(fields[2], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[3], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[4], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[5], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[6], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[7], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[8], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[9], COLOR_PAIR(6) | A_BOLD);
+    set_field_back(fields[10], COLOR_PAIR(6) | A_BOLD);
+
+    char_permissions perms_str;
+    perms_str.group_perm = "---";
+    perms_str.other_perm = "---";
+    perms_str.owner_perm = "---";
+
+    char take_dir = 'X';
+    char take_lnk = 'X';
+    char take_reg = 'X';
+
+    std::string min_size;
+    std::string max_size;
 
     set_field_buffer(fields[1], 0, OK_BUTTON);
     set_field_buffer(fields[2], 0, NO_BUTTON);
+    set_field_buffer(fields[3], 0, perms_str.owner_perm.c_str());
+    set_field_buffer(fields[4], 0, perms_str.group_perm.c_str());
+    set_field_buffer(fields[5], 0, perms_str.other_perm.c_str());
+    set_field_buffer(fields[6], 0, "X");
+    set_field_buffer(fields[7], 0, "X");
+    set_field_buffer(fields[8], 0, "X");
 
     wrefresh(win);
     pos_form_cursor(my_form);
     wrefresh(win);
 
-    bool entry_flag = navigation_find_utility(win, my_form, fields, _current_dir, _query);
-    for (size_t i = 0; i < 2; i++) {
+    bool entry_flag = navigation_find_utility(win, my_form, fields,
+                                              _current_dir,
+                                              min_size, max_size,
+                                              take_reg, take_dir, take_lnk,
+                                              perms_str, _query);
+    for (size_t i = 0; i < 10; i++) {
         free_field(fields[i]);
     }
+
     free_form(my_form);
     delwin(subwin);
     delwin(win);
@@ -1882,12 +1955,19 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query) {
 }
 
 bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
-                             const std::string& _dir, std::string &_query) {
+                             const std::string& _dir,
+                             std::string& _min_size,
+                             std::string& _max_size,
+                             char& take_file, char& take_dir, char& take_lnk,
+                             char_permissions& _str_perms,
+                             std::string &_query) {
     int ch;
     size_t current_index = 0;
+
     int offset = 0;
     size_t index_field = 0;
     current_index = _query.length();
+
     display_buffer_on_form(_form, _query, &current_index, offset);
     wrefresh(_win);
     while (true) {
