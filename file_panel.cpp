@@ -231,6 +231,11 @@ void file_panel::switch_directory(const std::string &_direction) {
         }
         current_directory = new_current_directory;
         read_current_dir();
+    } else {
+        std::string command = "xdg-open " + current_directory + "/" + _direction + " 2>/dev/null";
+        if((system(command.c_str())) == -1) {
+            return;
+        }
     }
 }
 
@@ -926,15 +931,7 @@ void file_panel::edit_permissions(file_panel &_other_panel) {
 
     if (entry_flag) {
         std::filesystem::perms new_perms = std::filesystem::perms::none;
-        if (perms.owner_perm[0] == 'r') new_perms |= std::filesystem::perms::owner_read;
-        if (perms.owner_perm[1] == 'w') new_perms |= std::filesystem::perms::owner_write;
-        if (perms.owner_perm[2] == 'x') new_perms |= std::filesystem::perms::owner_exec;
-        if (perms.group_perm[0] == 'r') new_perms |= std::filesystem::perms::group_read;
-        if (perms.group_perm[1] == 'w') new_perms |= std::filesystem::perms::group_write;
-        if (perms.group_perm[2] == 'x') new_perms |= std::filesystem::perms::group_exec;
-        if (perms.other_perm[0] == 'r') new_perms |= std::filesystem::perms::others_read;
-        if (perms.other_perm[1] == 'w') new_perms |= std::filesystem::perms::others_write;
-        if (perms.other_perm[2] == 'x') new_perms |= std::filesystem::perms::others_exec;
+        fill_permissions(perms, new_perms);
         try {
             if (perms.recursive == 'X' && std::filesystem::is_directory(path)) {
                 for (auto &&entry: std::filesystem::recursive_directory_iterator(path)) {
@@ -1719,12 +1716,34 @@ bool change_permissions_panel(const std::string &_header,
 
 
 void find_utility(file_panel& first, file_panel& second, const std::string& _current_dir) {
-    std::string _query;
-    _query.push_back('*');
-    bool flag_entry = create_find_panel(_current_dir, _query);
+    std::string _query("*");
+    char_permissions perms_str;
+    perms_str.group_perm = "---";
+    perms_str.other_perm = "---";
+    perms_str.owner_perm = "---";
+    char take_dir = 'X';
+    char take_lnk = 'X';
+    char take_reg = 'X';
+
+
+    std::string min_size;
+    std::string max_size;
+    bool flag_entry = create_find_panel(_current_dir, _query, min_size,
+                                        max_size, take_reg, take_dir, take_lnk, perms_str);
     if (flag_entry) {
+        bool flag_perms;
+        bool flag_dir, flag_reg, flag_lnk;
+        take_dir == 'X' ? flag_dir = true : flag_dir = false;
+        take_reg == 'X' ? flag_reg = true : flag_reg = false;
+        take_lnk == 'X' ? flag_lnk = true : flag_lnk = false;
+
+        std::filesystem::perms find_perms = std::filesystem::perms::none;
+        fill_permissions(perms_str, find_perms);
+        find_perms == std::filesystem::perms::none ? flag_perms = false : flag_perms = true;
         std::vector<std::string> results;
-        bool is_good_query = find_collect_results(_current_dir, _query, results);
+        bool is_good_query = find_collect_results(_current_dir, _query, results,
+                                                  flag_reg, flag_dir, flag_lnk, flag_perms,
+                                                  find_perms);
         if (is_good_query) {
             first.display_content();
             second.display_content();
@@ -1818,30 +1837,56 @@ void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _sta
     wattroff(_win, A_BOLD);
 }
 
-bool find_collect_results(const std::string& _current_dir, std::string &_query, std::vector<std::string>& _results) {
+bool find_collect_results(const std::string& _current_dir, std::string &_query, std::vector<std::string>& _results,
+                          bool flag_reg, bool flag_dir, bool flag_lnk, bool flag_perms, std::filesystem::perms& find_perms) {
+
     if (_query[0] == '*') {
         _query.erase(0, 1);
         for (const auto &entry: std::filesystem::recursive_directory_iterator(_current_dir,
                                                                               std::filesystem::directory_options::skip_permission_denied)) {
             if (entry.path().extension() == _query) {
-                _results.push_back(entry.path());
+                if ((entry.is_directory() && flag_dir) || (entry.is_symlink() && flag_lnk)
+                || (entry.is_regular_file() && flag_reg)) {
+                    if (flag_perms) {
+                        if (entry.status().permissions() == find_perms) {
+                            _results.push_back(entry.path());
+                        }
+                    }  else {
+                        _results.push_back(entry.path());
+                    }
+                }
             }
         }
     } else {
         for (const auto & entry : std::filesystem::recursive_directory_iterator(_current_dir,
                                                                                 std::filesystem::directory_options::skip_permission_denied)) {
             if (entry.path().filename() == _query) {
-                _results.push_back(entry.path());
+                if ((entry.is_directory() && flag_dir) || (entry.is_symlink() && flag_lnk)
+                    || (entry.is_regular_file() && flag_reg)) {
+                    if (flag_perms) {
+                        if (entry.status().permissions() == find_perms) {
+                            _results.push_back(entry.path());
+                        }
+                    } else {
+                        _results.push_back(entry.path());
+                    }
+                }
             }
         }
     }
+
+
+
     if (_results.empty()) {
         return false;
     }
     return true;
 }
 
-bool create_find_panel(const std::string &_current_dir, std::string& _query) {
+bool create_find_panel(const std::string &_current_dir, std::string& _query,
+                       std::string& min_size, std::string& max_size,
+                       char& take_reg, char& take_dir, char& take_lnk,
+                       char_permissions& perms_str) {
     int height = HEIGHT_FUNCTIONAL_PANEL + 9;
     int weight = WEIGHT_FUNCTIONAL_PANEL;
     WINDOW* win = create_functional_panel(" Find util ", height, weight);
@@ -1914,18 +1959,6 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query) {
     set_field_back(fields[8], COLOR_PAIR(6) | A_BOLD);
     set_field_back(fields[9], COLOR_PAIR(7) | A_BOLD);
     set_field_back(fields[10], COLOR_PAIR(7) | A_BOLD);
-
-    char_permissions perms_str;
-    perms_str.group_perm = "---";
-    perms_str.other_perm = "---";
-    perms_str.owner_perm = "---";
-
-    char take_dir = 'X';
-    char take_lnk = 'X';
-    char take_reg = 'X';
-
-    std::string min_size;
-    std::string max_size;
 
     set_field_buffer(fields[1], 0, perms_str.owner_perm.c_str());
     set_field_buffer(fields[2], 0, perms_str.group_perm.c_str());
@@ -2521,4 +2554,16 @@ bool is_input_field_find(size_t _index) {
         return true;
     }
     return false;
+}
+
+void fill_permissions(char_permissions &perms, std::filesystem::perms& new_perms) {
+    if (perms.owner_perm[0] == 'r') new_perms |= std::filesystem::perms::owner_read;
+    if (perms.owner_perm[1] == 'w') new_perms |= std::filesystem::perms::owner_write;
+    if (perms.owner_perm[2] == 'x') new_perms |= std::filesystem::perms::owner_exec;
+    if (perms.group_perm[0] == 'r') new_perms |= std::filesystem::perms::group_read;
+    if (perms.group_perm[1] == 'w') new_perms |= std::filesystem::perms::group_write;
+    if (perms.group_perm[2] == 'x') new_perms |= std::filesystem::perms::group_exec;
+    if (perms.other_perm[0] == 'r') new_perms |= std::filesystem::perms::others_read;
+    if (perms.other_perm[1] == 'w') new_perms |= std::filesystem::perms::others_write;
+    if (perms.other_perm[2] == 'x') new_perms |= std::filesystem::perms::others_exec;
 }
