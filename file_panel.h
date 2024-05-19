@@ -186,7 +186,7 @@ void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _sta
                        size_t _current_ind, std::vector<std::string> &_content);
 void find_pagination(size_t _direction, size_t _height, size_t& _start,
                      size_t& _current_ind, const std::vector<std::string>& _vec);
-
 bool is_input_field_find(size_t _index);
+void convert_str_to_window_size(std::string& _to, std::string& _from, size_t window_size);
 
 #endif //COURSE_PROJECT_FILE_PANEL_H

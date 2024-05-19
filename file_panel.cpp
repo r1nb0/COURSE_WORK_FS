@@ -102,9 +102,17 @@ void file_panel::display_content() {
         if (active_panel) {
             attron(A_BOLD | COLOR_PAIR(10));
             mvprintw(LINES - 1, 0, "%*s", COLS, " ");
+            int weight_line = COLS - 29;
+            std::string current_path = current_directory + "/" + content[current_ind].name_content;
+            std::string final_str;
+            if (current_path.length() > weight_line) {
+                convert_str_to_window_size(final_str, current_path, weight_line);
+            } else {
+                final_str = current_path;
+            }
             mvprintw(LINES - 1, 0, "%s%zu%s%zu%s%s", "File:     ",
                      current_ind + 1, " of ", content.size(), "     Path: ",
-                     (current_directory + "/" + content[current_ind].name_content).c_str());
+                     final_str.c_str());
             attroff(A_BOLD | COLOR_PAIR(10));
         }
         if (i == current_ind && active_panel) {
@@ -118,11 +126,19 @@ void file_panel::display_content() {
         std::string output_string = content[i].name_content;
         convert_to_output(output_string, content[i].content_type);
         size_t len_line = COLS / 2 - DATE_LEN - MAX_SIZE_LEN - 1;
-        if (len_line > output_string.length()) {
-            mvwprintw(win, static_cast<int>(ind_offset), 1, "%s", output_string.c_str());
+        //? maybe create error if panel resize < 5
+        if (len_line < output_string.length()) {
+            if (len_line < 5) {
+                mvwprintw(win, static_cast<int>(ind_offset), 1, "%s",
+                          output_string.substr(0, len_line).c_str());
+            } else {
+                std::string short_str;
+                convert_str_to_window_size(short_str, output_string, len_line);
+                mvwprintw(win, static_cast<int>(ind_offset), 1, "%s", short_str.c_str());
+            }
         } else {
             mvwprintw(win, static_cast<int>(ind_offset), 1, "%s",
-                      output_string.substr(0, len_line).c_str());
+                      output_string.c_str());
         }
 
         wattroff(win, COLOR_PAIR(3));
@@ -282,7 +298,15 @@ void file_panel::display_current_dir() {
         wattron(win, COLOR_PAIR(2));
         wattron(win, A_BOLD);
     }
-    mvwprintw(win, 0, 2, "%s", current_directory.c_str());
+    std::string short_dir;
+    size_t len = current_directory.length();
+    int width_window = COLS / 2 - 3;
+    if (len > width_window) {
+        convert_str_to_window_size(short_dir, current_directory, width_window);
+        mvwprintw(win, 0, 2, "%s", short_dir.c_str());
+    } else {
+        mvwprintw(win, 0, 2, "%s", current_directory.c_str());
+    }
     wattroff(win, COLOR_PAIR(2));
     wattroff(win, A_BOLD);
 }
@@ -1760,7 +1784,8 @@ void create_find_content_panel(std::vector<std::string>& _content) {
         }
     }
     int height = 20;
-    int weight = max_len > WEIGHT_HISTORY_PANEL - 2 ? static_cast<int>(max_len) + 2 : WEIGHT_HISTORY_PANEL;
+    //int weight = max_len > WEIGHT_HISTORY_PANEL - 2 ? static_cast<int>(max_len) + 2 : WEIGHT_HISTORY_PANEL;
+    int weight = max_len > COLS - 6 ? COLS - 6 : static_cast<int>(max_len);
     WINDOW* win = newwin(height, weight, (LINES - height) / 2, (COLS - weight) / 2);
     wbkgd(win, COLOR_PAIR(6));
     size_t current_ind = 0;
@@ -1829,7 +1854,13 @@ void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _sta
             wattron(_win, A_REVERSE);
         }
         mvwprintw(_win, static_cast<int>(offset), 1, "%*s", static_cast<int>(_height - 2), " ");
-        mvwprintw(_win, static_cast<int>(offset), 1, "%s", _content[i].c_str());
+        if (_weight - 2 < _content[i].length()) {
+            std::string short_str;
+            convert_str_to_window_size(short_str, _content[i], _weight - 2);
+            mvwprintw(_win, static_cast<int>(offset), 1, "%s", short_str.c_str());
+        } else {
+            mvwprintw(_win, static_cast<int>(offset), 1, "%s", _content[i].c_str());
+        }
         wattroff(_win, A_REVERSE);
         offset++;
     }
@@ -2301,7 +2332,9 @@ void create_history_panel() {
         create_error_panel(" History error ", "History is empty.", HEIGHT_FUNCTIONAL_PANEL - 2, WEIGHT_FUNCTIONAL_PANEL);
         return;
     }
-    int weight = history_vec.max_len > WEIGHT_HISTORY_PANEL - 2 ? static_cast<int>(history_vec.max_len) + 2 : WEIGHT_HISTORY_PANEL;
+
+    //int weight = history_vec.max_len > WEIGHT_HISTORY_PANEL - 2 ? static_cast<int>(history_vec.max_len) + 2 : WEIGHT_HISTORY_PANEL;
+    int weight = history_vec.max_len > COLS - 6 ? COLS - 6 : static_cast<int>(history_vec.max_len);
     int height = 15;
     WINDOW* win = newwin(height, weight, (LINES - height) / 2, (COLS - weight) / 2);
     wbkgd(win, COLOR_PAIR(6));
@@ -2350,7 +2383,13 @@ void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _
             wattron(_win, A_REVERSE);
         }
         mvwprintw(_win, static_cast<int>(offset), 1, "%*s", static_cast<int>(_height - 2), " ");
-        mvwprintw(_win, static_cast<int>(offset), 1, "%s", history_vec.history_path[i].c_str());
+        if (_weight - 2 < history_vec.history_path[i].length()) {
+            std::string short_str;
+            convert_str_to_window_size(short_str, history_vec.history_path[i], _weight - 2);
+            mvwprintw(_win, static_cast<int>(offset), 1, "%s", short_str.c_str());
+        } else {
+            mvwprintw(_win, static_cast<int>(offset), 1, "%s", history_vec.history_path[i].c_str());
+        }
         wattroff(_win, A_REVERSE);
         offset++;
     }
@@ -2566,4 +2605,15 @@ void fill_permissions(char_permissions &perms, std::filesystem::perms& new_perms
     if (perms.other_perm[0] == 'r') new_perms |= std::filesystem::perms::others_read;
     if (perms.other_perm[1] == 'w') new_perms |= std::filesystem::perms::others_write;
     if (perms.other_perm[2] == 'x') new_perms |= std::filesystem::perms::others_exec;
+}
+
+void convert_str_to_window_size(std::string &_to, std::string &_from, size_t window_size) {
+    size_t len = _from.length();
+    for (size_t i = 0; i < static_cast<int>(window_size / 2) - 1; i++) {
+        _to.push_back(_from[i]);
+    }
+    _to.push_back('~');
+    for (size_t j = len - window_size / 2; j < len; j++) {
+        _to.push_back(_from[j]);
+    }
 }
