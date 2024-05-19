@@ -1848,19 +1848,20 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query) {
     FIELD* fields[12];
     int left_offset = (weight - LEN_LINE_FIRST) / 2 - 1;
     fields[0] = new_field(1, LEN_LINE_FIRST, 2, left_offset, 0, 0);
-    fields[1] = new_field(1, 6, height - 5, 17, 0, 0);
-    fields[2] = new_field(1, 6, height - 5, 35, 0, 0);
 
-    fields[3] = new_field(1, 3, 5, left_offset + 1 + 8, 0, 0);      //permissions
-    fields[4] = new_field(1, 3, 5, left_offset + 8 + 8, 0, 0);
-    fields[5] = new_field(1, 3, 5, left_offset + 15 + 8, 0, 0);
+    fields[1] = new_field(1, 3, 5, left_offset + 1 + 8, 0, 0);      //permissions
+    fields[2] = new_field(1, 3, 5, left_offset + 8 + 8, 0, 0);
+    fields[3] = new_field(1, 3, 5, left_offset + 15 + 8, 0, 0);
 
-    fields[6] = new_field(1, 1, 8, left_offset + 1 + 8, 0, 0);          //types
-    fields[7] = new_field(1, 1, 8, left_offset + 6 + 8, 0, 0);
-    fields[8] = new_field(1, 1, 8, left_offset + 11 + 8, 0, 0);
+    fields[4] = new_field(1, 1, 8, left_offset + 1 + 8, 0, 0);          //types
+    fields[5] = new_field(1, 1, 8, left_offset + 6 + 8, 0, 0);
+    fields[6] = new_field(1, 1, 8, left_offset + 11 + 8, 0, 0);
 
-    fields[9] = new_field(1, 7, 11, left_offset + 8, 0, 0);         //size
-    fields[10] = new_field(1, 7, 11, left_offset + 19, 0, 0);
+    fields[7] = new_field(1, 7, 11, left_offset + 8, 0, 0);         //size
+    fields[8] = new_field(1, 7, 11, left_offset + 19, 0, 0);
+
+    fields[9] = new_field(1, 6, height - 5, 17, 0, 0);
+    fields[10] = new_field(1, 6, height - 5, 35, 0, 0);
 
     fields[11] = nullptr;
 
@@ -1909,10 +1910,10 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query) {
     set_field_back(fields[4], COLOR_PAIR(7) | A_BOLD);
     set_field_back(fields[5], COLOR_PAIR(7) | A_BOLD);
     set_field_back(fields[6], COLOR_PAIR(7) | A_BOLD);
-    set_field_back(fields[7], COLOR_PAIR(7) | A_BOLD);
-    set_field_back(fields[8], COLOR_PAIR(7) | A_BOLD);
-    set_field_back(fields[9], COLOR_PAIR(6) | A_BOLD);
-    set_field_back(fields[10], COLOR_PAIR(6) | A_BOLD);
+    set_field_back(fields[7], COLOR_PAIR(6) | A_BOLD);
+    set_field_back(fields[8], COLOR_PAIR(6) | A_BOLD);
+    set_field_back(fields[9], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[10], COLOR_PAIR(7) | A_BOLD);
 
     char_permissions perms_str;
     perms_str.group_perm = "---";
@@ -1926,14 +1927,14 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query) {
     std::string min_size;
     std::string max_size;
 
-    set_field_buffer(fields[1], 0, OK_BUTTON);
-    set_field_buffer(fields[2], 0, NO_BUTTON);
-    set_field_buffer(fields[3], 0, perms_str.owner_perm.c_str());
-    set_field_buffer(fields[4], 0, perms_str.group_perm.c_str());
-    set_field_buffer(fields[5], 0, perms_str.other_perm.c_str());
+    set_field_buffer(fields[1], 0, perms_str.owner_perm.c_str());
+    set_field_buffer(fields[2], 0, perms_str.group_perm.c_str());
+    set_field_buffer(fields[3], 0, perms_str.other_perm.c_str());
+    set_field_buffer(fields[4], 0, "X");
+    set_field_buffer(fields[5], 0, "X");
     set_field_buffer(fields[6], 0, "X");
-    set_field_buffer(fields[7], 0, "X");
-    set_field_buffer(fields[8], 0, "X");
+    set_field_buffer(fields[9], 0, OK_BUTTON);
+    set_field_buffer(fields[10], 0, NO_BUTTON);
 
     wrefresh(win);
     pos_form_cursor(my_form);
@@ -1979,6 +1980,20 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
     size_t index_field = 0;
 
     display_buffer_on_form(_form, _query, current_index, query_offset, LEN_LINE_FIRST);
+
+    auto edit_func = [&](char ch, size_t _ind) {
+        if (index_field == 1) {
+            _str_perms.owner_perm[_ind] == ch ? _str_perms.owner_perm[_ind] = '-' : _str_perms.owner_perm[_ind] = ch;
+            set_field_buffer(_fields[index_field], 0, _str_perms.owner_perm.c_str());
+        } else if (index_field == 2) {
+            _str_perms.group_perm[_ind] == ch ? _str_perms.group_perm[_ind] = '-' : _str_perms.group_perm[_ind] = ch;
+            set_field_buffer(_fields[index_field], 0, _str_perms.group_perm.c_str());
+        } else if (index_field == 3) {
+            _str_perms.other_perm[_ind] == ch ? _str_perms.other_perm[_ind] = '-' : _str_perms.other_perm[_ind] = ch;
+            set_field_buffer(_fields[index_field], 0, _str_perms.other_perm.c_str());
+        }
+    };
+
     wrefresh(_win);
     while (true) {
         switch (ch = getch()) {
@@ -1986,25 +2001,26 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
                 form_driver(_form, REQ_NEXT_FIELD);
                 index_field = field_index(current_field(_form));
                 if (index_field == 0) {
+                    set_field_back(_fields[10], COLOR_PAIR(7) | A_BOLD);
                     current_buffer = &_query;
                     current_index = &query_index;
                     current_offset = &query_offset;
                     curs_set(1);
-                } else if (index_field == 1) {
+                } else if (index_field == 1 || index_field == 9) {
                     set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
                     curs_set(0);
                 } else if (index_field == 2 || index_field == 3
                 || index_field == 4 || index_field == 5 || index_field == 6
-                || index_field == 7 || index_field == 8) {
+                || index_field == 10) {
                     set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
                     set_field_back(_fields[index_field - 1], COLOR_PAIR(7) | A_BOLD);
-                } else if (index_field == 9) {
+                } else if (index_field == 7) {
                     set_field_back(_fields[index_field - 1], COLOR_PAIR(7) | A_BOLD);
                     curs_set(1);
                     current_buffer = &_min_size;
                     current_index = &min_size_index;
                     current_offset = &min_size_offset;
-                } else {
+                } else if (index_field == 8){
                     current_buffer = &_max_size;
                     current_index = &max_size_index;
                     current_offset = &max_size_offset;
@@ -2015,11 +2031,24 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
                 return false;
             }
             case '\n' : {
-                if (index_field == 1) {
+                if (index_field == 4) {
+                    take_dir == 'X' ? take_dir = '-' : take_dir = 'X';
+                    char dir[1] = {take_dir};
+                    set_field_buffer(_fields[index_field], 0, dir);
+                } else if (index_field == 5) {
+                    take_file == 'X' ? take_file = '-' : take_file = 'X';
+                    char file[1] = {take_file};
+                    set_field_buffer(_fields[index_field], 0, file);
+                } else if (index_field == 6) {
+                    take_lnk == 'X' ? take_lnk = '-' : take_lnk = 'X';
+                    char lnk[1] = {take_lnk};
+                    set_field_buffer(_fields[index_field], 0, lnk);
+                } else if (index_field == 9) {
                     return true;
-                } else {
+                } else if (index_field == 10){
                     return false;
                 }
+                break;
             }
             case KEY_LEFT : {
                 if (is_input_field_dir_file(index_field)) {
@@ -2040,8 +2069,16 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
                 break;
             }
             default : {
-                if (is_input_field_find(index_field)) {
-                    if (index_field == 9 || index_field == 10) {
+                if (index_field == 1 || index_field == 2 || index_field == 3) {
+                    if (ch == 'r') {
+                        edit_func('r', 0);
+                    } else if (ch == 'w') {
+                        edit_func('w', 1);
+                    } else if (ch == 'x') {
+                        edit_func('x', 2);
+                    }
+                } else if (is_input_field_find(index_field)) {
+                    if (index_field == 7 || index_field == 8) {
                         insert_char_from_input_field(*current_buffer, current_index, current_offset, ch, 7);
                     } else {
                         insert_char_from_input_field(*current_buffer, current_index, current_offset, ch, LEN_LINE_FIRST);
@@ -2050,7 +2087,7 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
             }
         }
         if (is_input_field_find(index_field)) {
-            if (index_field == 9 || index_field == 10) {
+            if (index_field == 7 || index_field == 8) {
                 display_buffer_on_form(_form, *current_buffer, current_index, *current_offset, 7);
             } else {
                 display_buffer_on_form(_form, *current_buffer, current_index, *current_offset, LEN_LINE_FIRST);
@@ -2480,7 +2517,7 @@ void filesystem_info_mount() {
 }
 
 bool is_input_field_find(size_t _index) {
-    if (_index == 0 || _index == 9 || _index == 10) {
+    if (_index == 0 || _index == 7 || _index == 8) {
         return true;
     }
     return false;
