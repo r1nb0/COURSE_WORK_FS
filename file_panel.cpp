@@ -1771,12 +1771,46 @@ void find_utility(file_panel& first, file_panel& second, const std::string& _cur
         if (is_good_query) {
             first.display_content();
             second.display_content();
-            create_find_content_panel(results);
+            std::string return_result;
+            create_find_content_panel(results, return_result);
+            std::filesystem::path p(return_result);
+            if (std::filesystem::exists(p)) {
+                file_panel* current_panel;
+                if (first.is_active_panel()) {
+                    current_panel = &first;
+                } else {
+                    current_panel = &second;
+                }
+                bool is_dir = true;
+                std::string buffer;
+                if (!is_directory(p)) {
+                    buffer = p.filename().string();
+                    p = p.parent_path();
+                    is_dir = false;
+                }
+                current_panel->set_current_directory(p.string());
+                current_panel->read_current_dir();
+                if (is_dir) {
+                    current_panel->set_current_ind(0);
+                    current_panel->set_start_ind(0);
+                } else {
+                    const auto& vec = current_panel->get_content();
+                    size_t ind = 0;
+                    for (auto && it : vec) {
+                        if (it.name_content == buffer) {
+                            current_panel->set_current_ind(ind);
+                            current_panel->set_start_ind(static_cast<int>(ind / (LINES - 4)) * (LINES - 4));
+                            break;
+                        }
+                        ++ind;
+                    }
+                }
+            }
         }
     }
 }
 
-void create_find_content_panel(std::vector<std::string>& _content) {
+void create_find_content_panel(std::vector<std::string>& _content, std::string& return_result) {
     size_t max_len = 0;
     for (const auto & it : _content) {
         if (it.length() > max_len) {
@@ -1809,6 +1843,8 @@ void create_find_content_panel(std::vector<std::string>& _content) {
                 break;
             }
             case '\n' : {
+                flag_continue = false;
+                return_result = _content[current_ind];
                 break;
             }
             case 'q' : {
@@ -1847,7 +1883,7 @@ void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _sta
     box(_win, 0, 0);
     wattron(_win, A_BOLD);
     mvwprintw(_win, 0, static_cast<int>(_weight - (strlen(" Find content "))) / 2, "%s", " Find content ");
-
+    mvwprintw(_win, static_cast<int>(_height - 1), static_cast<int>((_weight - strlen("Accept[Enter]/Decline[Esc]")) / 2), "%s", "Accept[Enter]/Decline[Esc]");
     size_t offset = 1;
     for (size_t i = _start; i < _content.size() && i < (_height - 2) + _start; i++) {
         if (_current_ind == i) {
@@ -2327,12 +2363,11 @@ void convert_to_output(std::string &_name, CONTENT_TYPE _type) {
     }
 }
 
-void create_history_panel() {
+void create_history_panel(std::string& return_result) {
     if (history_vec.history_path.empty()) {
         create_error_panel(" History error ", "History is empty.", HEIGHT_FUNCTIONAL_PANEL - 2, WEIGHT_FUNCTIONAL_PANEL);
         return;
     }
-
     //int weight = history_vec.max_len > WEIGHT_HISTORY_PANEL - 2 ? static_cast<int>(history_vec.max_len) + 2 : WEIGHT_HISTORY_PANEL;
     int weight = history_vec.max_len > COLS - 6 ? COLS - 6 : static_cast<int>(history_vec.max_len);
     int height = 15;
@@ -2359,6 +2394,8 @@ void create_history_panel() {
                 break;
             }
             case '\n' : {
+                return_result = history_vec.history_path[current_ind];
+                flag_continue = false;
                 break;
             }
             case 'h' : {
@@ -2376,7 +2413,7 @@ void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _
     box(_win, 0, 0);
     wattron(_win, A_BOLD);
     mvwprintw(_win, 0, static_cast<int>(_weight - (strlen(HISTORY_HEADER))) / 2, "%s", HISTORY_HEADER);
-
+    mvwprintw(_win, static_cast<int>(_height - 1), static_cast<int>((_weight - strlen("Accept[Enter]/Decline[Esc]")) / 2), "%s", "Accept[Enter]/Decline[Esc]");
     size_t offset = 1;
     for (size_t i = _start; i < history_vec.history_path.size() && i < (_height - 2) + _start; i++) {
         if (_current_ind == i) {
@@ -2536,6 +2573,22 @@ void file_panel::analysis_selected_file() {
     werase(info_win);
     wrefresh(info_win);
     delwin(info_win);
+}
+
+void file_panel::set_current_directory(const std::string &_current_directory) {
+    current_directory = _current_directory;
+}
+
+bool file_panel::is_active_panel() const {
+    return active_panel;
+}
+
+void file_panel::set_current_ind(size_t _current_ind) {
+    current_ind = _current_ind;
+}
+
+void file_panel::set_start_ind(size_t _start_ind) {
+    start_index = _start_ind;
 }
 
 void filesystem_info_mount() {

@@ -113,7 +113,15 @@ int main() {
                 break;
             }
             case 'h' : {
-                create_history_panel();
+                std::string return_result;
+                create_history_panel(return_result);
+                std::filesystem::path p(return_result);
+                if (std::filesystem::exists(p)) {
+                    current_panel->set_current_directory(return_result);
+                    current_panel->read_current_dir();
+                    current_panel->set_current_ind(0);
+                    current_panel->set_start_ind(0);
+                }
                 break;
             }
             case '\t' : {

@@ -102,6 +102,7 @@ struct info {
 class file_panel {
 private:
     std::string current_directory;
+private:
     WINDOW* win;
     std::vector<info> content;
     bool active_panel;
@@ -117,6 +118,10 @@ public :
     [[nodiscard]] PANEL* get_panel() const;
     [[nodiscard]] size_t get_current_ind() const;
     [[nodiscard]] const std::string& get_current_directory() const;
+    [[nodiscard]] bool is_active_panel() const;
+    void set_current_ind(size_t _current_ind);
+    void set_start_ind(size_t _start_ind);
+    void set_current_directory(const std::string &_current_directory);
     void display_box();
     void display_current_dir();
     void set_active_panel(bool _active_panel);
@@ -164,7 +169,7 @@ void display_buffer_on_form(FORM* _form, const std::string& _buffer, const size_
 void create_error_panel(const std::string& _header, const std::string& _message, int height, int weight);
 bool change_permissions_panel(const std::string& _header, const std::string& _description, int height, int weight, char_permissions& _perms);
 REMOVE_TYPE create_remove_panel(const std::string& _header, const std::string& description, int height, int weight);
-void create_history_panel();
+void create_history_panel(std::string& _return_result);
 void fill_permissions(char_permissions& perms_str, std::filesystem::perms&);
 void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _start, size_t _current_ind);
 void history_pagination(size_t _direction, size_t _height, size_t& _start, size_t& _current_ind);
@@ -181,7 +186,7 @@ bool navigation_find_utility(WINDOW* _win, FORM* _form, FIELD** _fields,
 bool find_collect_results(const std::string& _current_dir, std::string& _query, std::vector<std::string>& _results,
                           bool, bool, bool, bool, std::filesystem::perms&);
 void find_utility(file_panel& _first, file_panel& _second, const std::string& _current_dir);
-void create_find_content_panel(std::vector<std::string>& _content);
+void create_find_content_panel(std::vector<std::string>& _content, std::string& return_result);
 void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _start,
                        size_t _current_ind, std::vector<std::string> &_content);
 void find_pagination(size_t _direction, size_t _height, size_t& _start,
