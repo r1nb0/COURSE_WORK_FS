@@ -2,6 +2,11 @@
 #include "file_panel.h"
 
 history_panel history_vec;
+std::vector<std::pair<std::string, std::string>> help_vec{{"F2", "Deleting"}, {"F3", "Create symlink"}, {"F5", "Create dir"},
+                                                     {"F6", "Create file"}, {"F7", "Rename content"}, {"F8", "Copy content"},
+                                                     {"F9", "Move content"}, {"p", "Edit perms"}, {"h", "History"},
+                                                     {"o", "Find utility"}, {"f", "Info mount"}, {"i", "Analyse file"},
+                                                     {"q", "Calculate size"}};
 
 void file_panel::read_current_dir() {
     if (!content.empty()) {
@@ -1505,6 +1510,7 @@ void init_colors() {
     init_pair(9, COLOR_WHITE, COLOR_RED);
     init_pair(10, COLOR_YELLOW, COLOR_BLUE);
     init_pair(11, COLOR_YELLOW, COLOR_BLUE);
+    init_pair(12, COLOR_YELLOW, COLOR_BLUE);
 
     init_pair(WHITE_COLOR, COLOR_WHITE, COLOR_BLACK);
     init_pair(GREEN_COLOR, COLOR_GREEN, COLOR_BLACK);
@@ -1889,7 +1895,7 @@ void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _sta
         if (_current_ind == i) {
             wattron(_win, A_REVERSE);
         }
-        mvwprintw(_win, static_cast<int>(offset), 1, "%*s", static_cast<int>(_height - 2), " ");
+        mvwprintw(_win, static_cast<int>(offset), 1, "%*s", static_cast<int>(_weight - 2), " ");
         if (_weight - 2 < _content[i].length()) {
             std::string short_str;
             convert_str_to_window_size(short_str, _content[i], _weight - 2);
@@ -1906,7 +1912,6 @@ void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _sta
 
 bool find_collect_results(const std::string& _current_dir, std::string &_query, std::vector<std::string>& _results,
                           bool flag_reg, bool flag_dir, bool flag_lnk, bool flag_perms, std::filesystem::perms& find_perms) {
-
     if (_query[0] == '*') {
         _query.erase(0, 1);
         for (const auto &entry: std::filesystem::recursive_directory_iterator(_current_dir,
@@ -2419,7 +2424,7 @@ void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _
         if (_current_ind == i) {
             wattron(_win, A_REVERSE);
         }
-        mvwprintw(_win, static_cast<int>(offset), 1, "%*s", static_cast<int>(_height - 2), " ");
+        mvwprintw(_win, static_cast<int>(offset), 1, "%*s", static_cast<int>(_weight - 2), " ");
         if (_weight - 2 < history_vec.history_path[i].length()) {
             std::string short_str;
             convert_str_to_window_size(short_str, history_vec.history_path[i], _weight - 2);
@@ -2668,5 +2673,86 @@ void convert_str_to_window_size(std::string &_to, std::string &_from, size_t win
     _to.push_back('~');
     for (size_t j = len - window_size / 2; j < len; j++) {
         _to.push_back(_from[j]);
+    }
+}
+
+void create_help_menu(char& _choice) {
+    int weight = 45;
+    int height = 15;
+    WINDOW* win = newwin(height, weight, (LINES - height) / 2, (COLS - weight) / 2);
+    size_t current_ind = 0;
+    size_t start = 0;
+    wbkgd(win, COLOR_PAIR(12));
+    help_menu_show_content(win, height, weight, start, current_ind);
+    wrefresh(win);
+    bool flag_continue = true;
+    while(flag_continue) {
+        switch(getch()) {
+            case KEY_RESIZE : {
+                flag_continue = false;
+                break;
+            }
+            case KEY_DOWN : {
+                //
+                help_menu_show_content(win, height, weight, start, current_ind);
+                break;
+            }
+            case KEY_UP : {
+
+                help_menu_show_content(win, height, weight, start, current_ind);
+                break;
+            }
+            case '\n' : {
+                break;
+            }
+            case 'q' : {
+                flag_continue = false;
+                break;
+            }
+        }
+    }
+    delwin(win);
+}
+
+void help_menu_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _start, size_t _current_ind) {
+    werase(_win);
+    refresh();
+    box(_win, 0, 0);
+    wattron(_win, A_BOLD);
+    mvwprintw(_win, 0, static_cast<int>(_weight - (strlen(" Help menu "))) / 2, "%s", " Help menu ");
+    mvwprintw(_win, static_cast<int>(_height - 1), static_cast<int>((_weight - strlen("Accept[Enter]/Decline[Esc]")) / 2), "%s", "Accept[Enter]/Decline[Esc]");
+    size_t offset = 1;
+    for (size_t i = _start; i < help_vec.size() && i < (_height - 2) + _start; i++) {
+        if (_current_ind == i) {
+            wattron(_win, A_REVERSE);
+        }
+        mvwprintw(_win, static_cast<int>(offset), 1, "%*s", static_cast<int>(_weight - 2), " ");
+        mvwprintw(_win, static_cast<int>(offset), 1, "%s", help_vec[i].first.c_str());
+        mvwprintw(_win, static_cast<int>(offset), 7, "%s", help_vec[i].second.c_str());
+
+        wattroff(_win, A_REVERSE);
+        offset++;
+    }
+    refresh_sub_panel(_win);
+    wattroff(_win, A_BOLD);
+}
+
+void help_panel_pagination(size_t _direction, size_t _height, size_t &_start, size_t &_current_ind) {
+    if (_direction == KEY_UP) {
+        if (_current_ind == 0) {
+            _start = 0;
+        } else if (_current_ind != _start) {
+            _current_ind--;
+        } else {
+            _start -= _height - 2;
+            _current_ind--;
+        }
+    } else if (_direction == KEY_DOWN) {
+        if (_current_ind + 1 < help_vec.size()) {
+            if (_current_ind + 1 >= _height - 2 + _start) {
+                _start += _height - 2;
+            }
+            _current_ind++;
+        }
     }
 }

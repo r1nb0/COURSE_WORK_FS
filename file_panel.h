@@ -192,6 +192,11 @@ void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _sta
 void find_pagination(size_t _direction, size_t _height, size_t& _start,
                      size_t& _current_ind, const std::vector<std::string>& _vec);
 bool is_input_field_find(size_t _index);
+void help_menu_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _start,
+                            size_t _current_ind);
 void convert_str_to_window_size(std::string& _to, std::string& _from, size_t window_size);
+void create_help_menu(char& _choice);
+void help_panel_pagination(size_t _direction, size_t _height, size_t& _start,
+                     size_t& _current_ind);
 
 #endif //COURSE_PROJECT_FILE_PANEL_H

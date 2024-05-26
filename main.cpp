@@ -124,6 +124,11 @@ int main() {
                 }
                 break;
             }
+            case 'm' : {
+                char choice;
+                create_help_menu(choice);
+                break;
+            }
             case '\t' : {
                 current_panel->set_active_panel(false);
                 current_panel == &left_panel ? (current_panel = &right_panel)
