@@ -121,6 +121,16 @@ int main() {
                 create_history_panel(return_result);
                 std::filesystem::path p(return_result);
                 if (std::filesystem::exists(p)) {
+                    if ((status(p).permissions() & std::filesystem::perms::owner_read) == std::filesystem::perms::none
+                    || (status(p).permissions() & std::filesystem::perms::owner_exec) == std::filesystem::perms::none) {
+                        left_panel.display_content();
+                        right_panel.display_content();
+                        std::string message = "Cannot open directory: '" + p.filename().string() + "'";
+                        create_error_panel(" Permission error ", message, HEIGHT_FUNCTIONAL_PANEL,
+                                           WEIGHT_FUNCTIONAL_PANEL > message.length()
+                                           ? WEIGHT_FUNCTIONAL_PANEL : message.length());
+                        break;
+                    }
                     current_panel->set_current_directory(return_result);
                     current_panel->read_current_dir();
                     current_panel->set_current_ind(0);

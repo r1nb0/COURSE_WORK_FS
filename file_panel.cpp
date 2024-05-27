@@ -96,6 +96,14 @@ void file_panel::display_lines() {
 }
 
 void file_panel::display_content() {
+    if (COLS < 66) {
+        std::string message = "Terminal too narrow to show contents";
+        create_error_panel(" Window size error ", message,
+                           HEIGHT_FUNCTIONAL_PANEL, WEIGHT_FUNCTIONAL_PANEL);
+
+        endwin();
+        exit(-1);
+    }
     werase(win);
     refresh();
     display_box();
@@ -1788,6 +1796,16 @@ void find_utility(file_panel& first, file_panel& second, const std::string& _cur
                     buffer = p.filename().string();
                     p = p.parent_path();
                     is_dir = false;
+                }
+                if ((status(p).permissions() & std::filesystem::perms::owner_read) == std::filesystem::perms::none
+                    || (status(p).permissions() & std::filesystem::perms::owner_exec) == std::filesystem::perms::none) {
+                    first.display_content();
+                    second.display_content();
+                    std::string message = "Cannot open directory: '" + p.filename().string() + "'";
+                    create_error_panel(" Permission error ", message, HEIGHT_FUNCTIONAL_PANEL,
+                                       WEIGHT_FUNCTIONAL_PANEL > message.length()
+                                       ? WEIGHT_FUNCTIONAL_PANEL : message.length());
+                    return;
                 }
                 current_panel->set_current_directory(p.string());
                 current_panel->read_current_dir();
