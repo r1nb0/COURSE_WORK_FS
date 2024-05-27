@@ -112,6 +112,10 @@ int main() {
                 filesystem_info_mount();
                 break;
             }
+            case 'v' : {
+                current_panel->calculate_size();
+                break;
+            }
             case 'h' : {
                 std::string return_result;
                 create_history_panel(return_result);

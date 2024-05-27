@@ -6,7 +6,7 @@ std::vector<std::pair<std::string, std::string>> help_vec{{"F2", "Deleting"}, {"
                                                      {"F6", "Create file"}, {"F7", "Rename content"}, {"F8", "Copy content"},
                                                      {"F9", "Move content"}, {"p", "Edit perms"}, {"h", "History"},
                                                      {"o", "Find utility"}, {"f", "Info mount"}, {"i", "Analyse file"},
-                                                     {"q", "Calculate size"}};
+                                                     {"v", "Calculate size"}};
 
 void file_panel::read_current_dir() {
     if (!content.empty()) {
@@ -133,14 +133,9 @@ void file_panel::display_content() {
         size_t len_line = COLS / 2 - DATE_LEN - MAX_SIZE_LEN - 1;
         //? maybe create error if panel resize < 5
         if (len_line < output_string.length()) {
-            if (len_line < 5) {
-                mvwprintw(win, static_cast<int>(ind_offset), 1, "%s",
-                          output_string.substr(0, len_line).c_str());
-            } else {
-                std::string short_str;
-                convert_str_to_window_size(short_str, output_string, len_line);
-                mvwprintw(win, static_cast<int>(ind_offset), 1, "%s", short_str.c_str());
-            }
+            std::string short_str;
+            convert_str_to_window_size(short_str, output_string, len_line);
+            mvwprintw(win, static_cast<int>(ind_offset), 1, "%s", short_str.c_str());
         } else {
             mvwprintw(win, static_cast<int>(ind_offset), 1, "%s",
                       output_string.c_str());
@@ -1889,7 +1884,7 @@ void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _sta
     box(_win, 0, 0);
     wattron(_win, A_BOLD);
     mvwprintw(_win, 0, static_cast<int>(_weight - (strlen(" Find content "))) / 2, "%s", " Find content ");
-    mvwprintw(_win, static_cast<int>(_height - 1), static_cast<int>((_weight - strlen("Accept[Enter]/Decline[Esc]")) / 2), "%s", "Accept[Enter]/Decline[Esc]");
+    mvwprintw(_win, static_cast<int>(_height - 1), static_cast<int>((_weight - strlen("Accept[Enter]/Decline[q]")) / 2), "%s", "Accept[Enter]/Decline[q]");
     size_t offset = 1;
     for (size_t i = _start; i < _content.size() && i < (_height - 2) + _start; i++) {
         if (_current_ind == i) {
@@ -2418,7 +2413,7 @@ void history_show_content(WINDOW* _win, size_t _height, size_t _weight, size_t _
     box(_win, 0, 0);
     wattron(_win, A_BOLD);
     mvwprintw(_win, 0, static_cast<int>(_weight - (strlen(HISTORY_HEADER))) / 2, "%s", HISTORY_HEADER);
-    mvwprintw(_win, static_cast<int>(_height - 1), static_cast<int>((_weight - strlen("Accept[Enter]/Decline[Esc]")) / 2), "%s", "Accept[Enter]/Decline[Esc]");
+    mvwprintw(_win, static_cast<int>(_height - 1), static_cast<int>((_weight - strlen("Accept[Enter]/Decline[q]")) / 2), "%s", "Accept[Enter]/Decline[q]");
     size_t offset = 1;
     for (size_t i = _start; i < history_vec.history_path.size() && i < (_height - 2) + _start; i++) {
         if (_current_ind == i) {
@@ -2596,6 +2591,33 @@ void file_panel::set_start_ind(size_t _start_ind) {
     start_index = _start_ind;
 }
 
+void file_panel::calculate_size() {
+    uintmax_t size_bytes = 0;
+    if (this->content[current_ind].content_type == CONTENT_TYPE::IS_DIR) {
+        if (this->content[current_ind].name_content == "..") {
+            return;
+        }
+        std::filesystem::path current_path(this->current_directory + "/" + this->content[current_ind].name_content);
+        if ((status(current_path).permissions() & std::filesystem::perms::owner_read) == std::filesystem::perms::none) {
+            std::string message = "Cannot calculate size from: '" + current_path.filename().string() + "'";
+            create_error_panel(" Permission error ", message,
+                               HEIGHT_FUNCTIONAL_PANEL - 2,
+                               WEIGHT_FUNCTIONAL_PANEL > message.length()
+                               ? WEIGHT_FUNCTIONAL_PANEL : message.length() + 2);
+            return;
+        }
+        for (auto && entry : std::filesystem::recursive_directory_iterator(current_path, std::filesystem::directory_options::skip_permission_denied)) {
+            if (entry.is_regular_file() || entry.is_regular_file()
+            || entry.is_block_file() || entry.is_fifo() || entry.is_socket()) {
+                struct stat sb {};
+                lstat(entry.path().string().c_str(), &sb);
+                size_bytes += sb.st_size;
+            }
+        }
+        create_calculate_panel(size_bytes, current_path.filename().string());
+    }
+}
+
 void filesystem_info_mount() {
     clear();
     refresh();
@@ -2693,16 +2715,13 @@ void create_help_menu(char& _choice) {
                 break;
             }
             case KEY_DOWN : {
-                //
+                help_panel_pagination(KEY_DOWN, height, start, current_ind);
                 help_menu_show_content(win, height, weight, start, current_ind);
                 break;
             }
             case KEY_UP : {
-
+                help_panel_pagination(KEY_UP, height, start, current_ind);
                 help_menu_show_content(win, height, weight, start, current_ind);
-                break;
-            }
-            case '\n' : {
                 break;
             }
             case 'q' : {
@@ -2720,7 +2739,7 @@ void help_menu_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t
     box(_win, 0, 0);
     wattron(_win, A_BOLD);
     mvwprintw(_win, 0, static_cast<int>(_weight - (strlen(" Help menu "))) / 2, "%s", " Help menu ");
-    mvwprintw(_win, static_cast<int>(_height - 1), static_cast<int>((_weight - strlen("Accept[Enter]/Decline[Esc]")) / 2), "%s", "Accept[Enter]/Decline[Esc]");
+    mvwprintw(_win, static_cast<int>(_height - 1), static_cast<int>((_weight - strlen("Exit[q]")) / 2), "%s", "Exit[q]");
     size_t offset = 1;
     for (size_t i = _start; i < help_vec.size() && i < (_height - 2) + _start; i++) {
         if (_current_ind == i) {
@@ -2728,7 +2747,7 @@ void help_menu_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t
         }
         mvwprintw(_win, static_cast<int>(offset), 1, "%*s", static_cast<int>(_weight - 2), " ");
         mvwprintw(_win, static_cast<int>(offset), 1, "%s", help_vec[i].first.c_str());
-        mvwprintw(_win, static_cast<int>(offset), 7, "%s", help_vec[i].second.c_str());
+        mvwprintw(_win, static_cast<int>(offset), 9, "%s", help_vec[i].second.c_str());
 
         wattroff(_win, A_REVERSE);
         offset++;
@@ -2755,4 +2774,19 @@ void help_panel_pagination(size_t _direction, size_t _height, size_t &_start, si
             _current_ind++;
         }
     }
+}
+
+void create_calculate_panel(uintmax_t size, const std::string& filename) {
+    int height = 7;
+    int weight = 40;
+    WINDOW* win = newwin(height, weight, (LINES - height) / 2, (COLS - weight) / 2);
+    wbkgd(win, COLOR_PAIR(12));
+    box(win, 0, 0);
+    mvwprintw(win, 0, static_cast<int>((weight - strlen("Calculate size")) / 2), "%s", "Calculate size");
+    mvwprintw(win, height - 1, static_cast<int>((weight - strlen("Press any button to continue")) / 2), "%s", "Press any button to continue");
+    mvwprintw(win, 2, 3, "%s%s","File: ", filename.c_str());
+    mvwprintw(win, 3, 3, "%s%zu%s", "Size: ", size, " bytes");
+    wrefresh(win);
+    getch();
+    delwin(win);
 }

@@ -133,6 +133,7 @@ public :
     void refresh_panels();
     void resize_panel(size_t _rows, size_t _cols, size_t _x, size_t _y);
     void display_content();
+    void calculate_size();
     void edit_permissions(file_panel& _other_panel);
     void create_symlink(file_panel& _other_panel);
     void create_file(file_panel& _other_panel);
@@ -198,5 +199,6 @@ void convert_str_to_window_size(std::string& _to, std::string& _from, size_t win
 void create_help_menu(char& _choice);
 void help_panel_pagination(size_t _direction, size_t _height, size_t& _start,
                      size_t& _current_ind);
+void create_calculate_panel(uintmax_t size, const std::string& filename);
 
 #endif //COURSE_PROJECT_FILE_PANEL_H
