@@ -1788,7 +1788,13 @@ void find_utility(file_panel& first, file_panel& second, const std::string& _cur
     char take_lnk = 'X';
     char take_reg = 'X';
 
-
+    if ((first.is_active_panel() && first.get_current_directory() == "/")
+        || (second.is_active_panel() && second.get_current_directory() == "/")) {
+        create_error_panel(" Permission error(system level) ",
+                           "Search is not possible with the system files",
+                           8, 65);
+        return;
+    }
     std::string min_size;
     std::string max_size;
     bool flag_entry = create_find_panel(_current_dir, _query, min_size,
@@ -1807,45 +1813,27 @@ void find_utility(file_panel& first, file_panel& second, const std::string& _cur
         bool is_good_query = find_collect_results(_current_dir, _query, results,
                                                   flag_reg, flag_dir, flag_lnk, flag_perms,
                                                   find_perms);
-        if (is_good_query) {
-            first.display_content();
-            second.display_content();
-            std::string return_result;
-            create_find_content_panel(results, return_result);
-            std::filesystem::path p(return_result);
-            if (std::filesystem::exists(p)) {
-                file_panel* current_panel;
-                if (first.is_active_panel()) {
-                    current_panel = &first;
-                } else {
-                    current_panel = &second;
-                }
-                bool is_dir = true;
-                std::string buffer;
-                if (!is_directory(p)) {
-                    buffer = p.filename().string();
+        try {
+            if (is_good_query) {
+                first.display_content();
+                second.display_content();
+                std::string return_result;
+                create_find_content_panel(results, return_result);
+                std::filesystem::path p(return_result);
+                if (std::filesystem::exists(p)) {
+                    file_panel *current_panel;
+                    if (first.is_active_panel()) {
+                        current_panel = &first;
+                    } else {
+                        current_panel = &second;
+                    }
+                    std::string buffer = p.filename().string();
                     p = p.parent_path();
-                    is_dir = false;
-                }
-                if ((status(p).permissions() & std::filesystem::perms::owner_read) == std::filesystem::perms::none
-                    || (status(p).permissions() & std::filesystem::perms::owner_exec) == std::filesystem::perms::none) {
-                    first.display_content();
-                    second.display_content();
-                    std::string message = "Cannot open directory: '" + p.filename().string() + "'";
-                    create_error_panel(" Permission error ", message, HEIGHT_FUNCTIONAL_PANEL,
-                                       WEIGHT_FUNCTIONAL_PANEL > message.length()
-                                       ? WEIGHT_FUNCTIONAL_PANEL : message.length());
-                    return;
-                }
-                current_panel->set_current_directory(p.string());
-                current_panel->read_current_dir();
-                if (is_dir) {
-                    current_panel->set_current_ind(0);
-                    current_panel->set_start_ind(0);
-                } else {
-                    const auto& vec = current_panel->get_content();
+                    current_panel->set_current_directory(p.string());
+                    current_panel->read_current_dir();
+                    const auto &vec = current_panel->get_content();
                     size_t ind = 0;
-                    for (auto && it : vec) {
+                    for (auto &&it: vec) {
                         if (it.name_content == buffer) {
                             current_panel->set_current_ind(ind);
                             current_panel->set_start_ind(static_cast<int>(ind / (LINES - 4)) * (LINES - 4));
@@ -1855,6 +1843,15 @@ void find_utility(file_panel& first, file_panel& second, const std::string& _cur
                     }
                 }
             }
+        } catch (std::filesystem::filesystem_error& e) {
+            first.display_content();
+            second.display_content();
+            generate_permission_error(e);
+        }
+        if (!is_good_query) {
+            first.display_content();
+            second.display_content();
+            create_error_panel(" Find empty ", "No results were found for your request.", 8, 45);
         }
     }
 }
@@ -1953,29 +1950,43 @@ void find_show_content(WINDOW *_win, size_t _height, size_t _weight, size_t _sta
     wattroff(_win, A_BOLD);
 }
 
-bool find_collect_results(const std::string& _current_dir, std::string &_query, std::vector<std::string>& _results,
-                          bool flag_reg, bool flag_dir, bool flag_lnk, bool flag_perms, std::filesystem::perms& find_perms) {
+bool find_collect_results(const std::string &_current_dir, std::string &_query, std::vector<std::string> &_results,
+                          bool flag_reg, bool flag_dir, bool flag_lnk, bool flag_perms,
+                          std::filesystem::perms &find_perms) {
     if (_query[0] == '*') {
         _query.erase(0, 1);
         for (const auto &entry: std::filesystem::recursive_directory_iterator(_current_dir,
-                                                                              std::filesystem::directory_options::skip_permission_denied)) {
+                                                        std::filesystem::directory_options::skip_permission_denied)) {
             if (entry.path().extension() == _query) {
                 if ((entry.is_directory() && flag_dir) || (entry.is_symlink() && flag_lnk)
-                || (entry.is_regular_file() && flag_reg)) {
+                    || (entry.is_regular_file() && flag_reg)) {
                     if (flag_perms) {
                         if (entry.status().permissions() == find_perms) {
                             _results.push_back(entry.path());
                         }
-                    }  else {
+                    } else {
                         _results.push_back(entry.path());
                     }
                 }
             }
         }
     } else {
-        for (const auto & entry : std::filesystem::recursive_directory_iterator(_current_dir,
-                                                                                std::filesystem::directory_options::skip_permission_denied)) {
-            if (entry.path().filename() == _query) {
+        for (const auto &entry: std::filesystem::recursive_directory_iterator(_current_dir,
+                                                                              std::filesystem::directory_options::skip_permission_denied)) {
+            if (entry.is_directory()) {
+                if ((entry.status().permissions() & std::filesystem::perms::owner_exec) ==
+                    std::filesystem::perms::none) {
+                    continue;
+                }
+            }
+            std::string buffer_filename = entry.path().filename().string();
+            for (size_t i = 0; i < buffer_filename.length(); ++i) {
+                buffer_filename[i] = tolower(buffer_filename[i]);
+            }
+            for (size_t i = 0; i < _query.length(); ++i) {
+                _query[i] = tolower(_query[i]);
+            }
+            if (buffer_filename.find(_query) != std::string::npos) {
                 if ((entry.is_directory() && flag_dir) || (entry.is_symlink() && flag_lnk)
                     || (entry.is_regular_file() && flag_reg)) {
                     if (flag_perms) {
@@ -1989,9 +2000,6 @@ bool find_collect_results(const std::string& _current_dir, std::string &_query, 
             }
         }
     }
-
-
-
     if (_results.empty()) {
         return false;
     }
@@ -2508,6 +2516,9 @@ void refresh_sub_panel(WINDOW *_win) {
 }
 
 void file_panel::analysis_selected_file() {
+    if (content[current_ind].content_type == CONTENT_TYPE::IS_HANGING_LINK) {
+        return;
+    }
     clear();
     refresh();
     WINDOW* info_win = newwin(LINES, COLS, 0, 0);
@@ -2523,11 +2534,23 @@ void file_panel::analysis_selected_file() {
     wattron(info_win, COLOR_PAIR(GREEN_COLOR));
     int info_lines = 11;
     int start = (LINES - info_lines) / 2;
-    std::string current_path_str = current_directory + "/" + content[current_ind].name_content;
+    std::string current_path_str;
+    if (current_directory != "/") {
+        current_path_str = current_directory + "/" + content[current_ind].name_content;
+    } else {
+        current_path_str = current_directory + content[current_ind].name_content;
+    }
+    std::string target_link;
     std::filesystem::path current_path(current_directory + "/" + content[current_ind].name_content);
     std::string type_and_name;
     if (is_directory(current_path) && !is_symlink(current_path)) {
         type_and_name += "Directory: ";
+    } else if (is_directory(current_path) && is_symlink(current_path)) {
+        type_and_name += "Directory symlink: ";
+        target_link = std::filesystem::read_symlink(current_path).string();
+    } else if (is_symlink(current_path)) {
+        target_link = std::filesystem::read_symlink(current_path).string();
+        type_and_name += "Symlink: ";
     } else if (is_regular_file(current_path)) {
         type_and_name += "Regular file: ";
     } else if (is_character_file(current_path)) {
@@ -2538,10 +2561,6 @@ void file_panel::analysis_selected_file() {
         type_and_name += "Block file: ";
     } else if (is_socket(current_path)) {
         type_and_name += "Socket: ";
-    } else if (is_directory(current_path) && is_symlink(current_path)) {
-        type_and_name += "Directory symlink: ";
-    } else if (is_symlink(current_path)) {
-        type_and_name += "Symlink: ";
     } else {
         type_and_name += "Unknown type: ";
     }
@@ -2569,8 +2588,7 @@ void file_panel::analysis_selected_file() {
     parse_arg(perms, 'w', std::filesystem::perms::others_write);
     parse_arg(perms, 'x', std::filesystem::perms::others_exec);
 
-    std::string mode_str = "Mode: " + perms + " (" +  + ")";
-
+    std::string mode_str = "Mode: " + perms;
 
     std::string link_str = "Links: " + std::to_string(sb.st_nlink);
     getpwuid(sb.st_uid);
@@ -2601,9 +2619,14 @@ void file_panel::analysis_selected_file() {
 
     std::string filesystem_name = a[1].substr(0, a[1].find(' '));
     std::string file_system = "File system: " + filesystem_name + " (" + std::to_string(sb.st_dev) + ")";
-
-    int len = static_cast<int>((COLS - path_str.length()) / 2);
-    type_and_name += content[current_ind].name_content;
+    if (!target_link.empty()) {
+        type_and_name += content[current_ind].name_content + " -> " + target_link;
+    } else {
+        type_and_name += content[current_ind].name_content;
+    }
+    int max_len_str = static_cast<int>(std::max(std::max(size_str.length(), type_and_name.length()), path_str.length()));
+    int len = (COLS - max_len_str) / 2;
+    std::string short_name, short_path;
     mvwprintw(info_win, start++, len, "%s", type_and_name.c_str());
     mvwprintw(info_win, start++, len, "%s", path_str.c_str());
     mvwprintw(info_win, start++, len, "%s", size_str.c_str());
