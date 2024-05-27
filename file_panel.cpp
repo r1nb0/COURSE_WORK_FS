@@ -409,6 +409,16 @@ void file_panel::create_directory(file_panel &_other_panel) {
                     _other_panel.read_current_dir();
                 }
                 read_current_dir();
+                size_t i = 0;
+                const auto& vec = this->get_content();
+                for (auto && it : vec) {
+                    if (it.name_content == name_directory) {
+                        this->set_current_ind(i);
+                        this->set_start_ind(static_cast<int>(i / (LINES - 4)) * (LINES - 4));
+                        break;
+                    }
+                    i++;
+                }
             } else {
                 display_content();
                 _other_panel.display_content();
@@ -448,6 +458,16 @@ void file_panel::create_file(file_panel &_other_panel) {
                     _other_panel.read_current_dir();
                 }
                 read_current_dir();
+                size_t i = 0;
+                const auto& vec = this->get_content();
+                for (auto && it : vec) {
+                    if (it.name_content == name_file) {
+                        this->set_current_ind(i);
+                        this->set_start_ind(static_cast<int>(i / (LINES - 4)) * (LINES - 4));
+                        break;
+                    }
+                    i++;
+                }
             } else {
                 display_content();
                 _other_panel.display_content();
@@ -491,7 +511,17 @@ void file_panel::create_symlink(file_panel &_other_panel) {
                 if (_other_panel.current_directory == this->current_directory) {
                     _other_panel.read_current_dir();
                 }
+                size_t i = 0;
+                const std::vector<info>& vec = this->get_content();
                 this->read_current_dir();
+                for (auto && it : vec) {
+                    if (it.name_content == namelink) {
+                        this->set_current_ind(i);
+                        this->set_start_ind(static_cast<int>(i / (LINES - 4)) * (LINES - 4));
+                        break;
+                    }
+                    i++;
+                }
             }
         }
     }
@@ -1838,7 +1868,7 @@ void create_find_content_panel(std::vector<std::string>& _content, std::string& 
     }
     int height = 20;
     //int weight = max_len > WEIGHT_HISTORY_PANEL - 2 ? static_cast<int>(max_len) + 2 : WEIGHT_HISTORY_PANEL;
-    int weight = max_len > COLS - 6 ? COLS - 6 : static_cast<int>(max_len);
+    int weight = max_len + 2 > COLS - 6 ? COLS - 6 : static_cast<int>(max_len + 2);
     WINDOW* win = newwin(height, weight, (LINES - height) / 2, (COLS - weight) / 2);
     wbkgd(win, COLOR_PAIR(6));
     size_t current_ind = 0;
@@ -2387,7 +2417,7 @@ void create_history_panel(std::string& return_result) {
         return;
     }
     //int weight = history_vec.max_len > WEIGHT_HISTORY_PANEL - 2 ? static_cast<int>(history_vec.max_len) + 2 : WEIGHT_HISTORY_PANEL;
-    int weight = history_vec.max_len > COLS - 6 ? COLS - 6 : static_cast<int>(history_vec.max_len);
+    int weight = history_vec.max_len + 2 > COLS - 6 ? COLS - 6 : static_cast<int>(history_vec.max_len + 2);
     int height = 15;
     WINDOW* win = newwin(height, weight, (LINES - height) / 2, (COLS - weight) / 2);
     wbkgd(win, COLOR_PAIR(6));
