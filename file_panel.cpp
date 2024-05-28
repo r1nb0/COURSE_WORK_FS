@@ -1795,10 +1795,9 @@ void find_utility(file_panel& first, file_panel& second, const std::string& _cur
                            8, 65);
         return;
     }
-    std::string min_size;
-    std::string max_size;
-    bool flag_entry = create_find_panel(_current_dir, _query, min_size,
-                                        max_size, take_reg, take_dir, take_lnk, perms_str);
+
+    bool flag_entry = create_find_panel(_current_dir, _query,
+                                         take_reg, take_dir, take_lnk, perms_str);
     if (flag_entry) {
         bool flag_perms;
         bool flag_dir, flag_reg, flag_lnk;
@@ -1957,28 +1956,24 @@ bool find_collect_results(const std::string &_current_dir, std::string &_query, 
         _query.erase(0, 1);
         for (const auto &entry: std::filesystem::recursive_directory_iterator(_current_dir,
                                                         std::filesystem::directory_options::skip_permission_denied)) {
-            if (entry.path().extension() == _query) {
-                if ((entry.is_directory() && flag_dir) || (entry.is_symlink() && flag_lnk)
-                    || (entry.is_regular_file() && flag_reg)) {
-                    if (flag_perms) {
-                        if (entry.status().permissions() == find_perms) {
+            try {
+                if (entry.path().extension() == _query) {
+                    if ((entry.is_directory() && flag_dir) || (entry.is_symlink() && flag_lnk)
+                        || (entry.is_regular_file() && flag_reg)) {
+                        if (flag_perms) {
+                            if (entry.status().permissions() == find_perms) {
+                                _results.push_back(entry.path());
+                            }
+                        } else {
                             _results.push_back(entry.path());
                         }
-                    } else {
-                        _results.push_back(entry.path());
                     }
                 }
-            }
+            } catch(std::filesystem::filesystem_error& e) { }
         }
     } else {
         for (const auto &entry: std::filesystem::recursive_directory_iterator(_current_dir,
                                                                               std::filesystem::directory_options::skip_permission_denied)) {
-            if (entry.is_directory()) {
-                if ((entry.status().permissions() & std::filesystem::perms::owner_exec) ==
-                    std::filesystem::perms::none) {
-                    continue;
-                }
-            }
             std::string buffer_filename = entry.path().filename().string();
             for (size_t i = 0; i < buffer_filename.length(); ++i) {
                 buffer_filename[i] = tolower(buffer_filename[i]);
@@ -1986,18 +1981,20 @@ bool find_collect_results(const std::string &_current_dir, std::string &_query, 
             for (size_t i = 0; i < _query.length(); ++i) {
                 _query[i] = tolower(_query[i]);
             }
-            if (buffer_filename.find(_query) != std::string::npos) {
-                if ((entry.is_directory() && flag_dir) || (entry.is_symlink() && flag_lnk)
-                    || (entry.is_regular_file() && flag_reg)) {
-                    if (flag_perms) {
-                        if (entry.status().permissions() == find_perms) {
+            try {
+                if (buffer_filename.find(_query) != std::string::npos) {
+                    if ((entry.is_directory() && flag_dir) || (entry.is_symlink() && flag_lnk)
+                        || (entry.is_regular_file() && flag_reg)) {
+                        if (flag_perms) {
+                            if (entry.status().permissions() == find_perms) {
+                                _results.push_back(entry.path());
+                            }
+                        } else {
                             _results.push_back(entry.path());
                         }
-                    } else {
-                        _results.push_back(entry.path());
                     }
                 }
-            }
+            } catch(std::filesystem::filesystem_error& e) { }
         }
     }
     if (_results.empty()) {
@@ -2007,13 +2004,12 @@ bool find_collect_results(const std::string &_current_dir, std::string &_query, 
 }
 
 bool create_find_panel(const std::string &_current_dir, std::string& _query,
-                       std::string& min_size, std::string& max_size,
                        char& take_reg, char& take_dir, char& take_lnk,
                        char_permissions& perms_str) {
     int height = HEIGHT_FUNCTIONAL_PANEL + 9;
     int weight = WEIGHT_FUNCTIONAL_PANEL;
     WINDOW* win = create_functional_panel(" Find util ", height, weight);
-    FIELD* fields[12];
+    FIELD* fields[10];
     int left_offset = (weight - LEN_LINE_FIRST) / 2 - 1;
     fields[0] = new_field(1, LEN_LINE_FIRST, 2, left_offset, 0, 0);
 
@@ -2025,13 +2021,10 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query,
     fields[5] = new_field(1, 1, 8, left_offset + 6 + 8, 0, 0);
     fields[6] = new_field(1, 1, 8, left_offset + 11 + 8, 0, 0);
 
-    fields[7] = new_field(1, 7, 11, left_offset + 8, 0, 0);         //size
-    fields[8] = new_field(1, 7, 11, left_offset + 19, 0, 0);
+    fields[7] = new_field(1, 6, height - 5, 17, 0, 0);
+    fields[8] = new_field(1, 6, height - 5, 35, 0, 0);
 
-    fields[9] = new_field(1, 6, height - 5, 17, 0, 0);
-    fields[10] = new_field(1, 6, height - 5, 35, 0, 0);
-
-    fields[11] = nullptr;
+    fields[9] = nullptr;
 
     FORM* my_form = new_form(fields);
     set_form_win(my_form, win);
@@ -2045,7 +2038,6 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query,
 
     mvwprintw(subwin, 5, left_offset, "%s", "Perms:");
     mvwprintw(subwin, 8, left_offset, "%s", "Types:");
-    mvwprintw(subwin, 11, left_offset, "%s", "Size:");
 
     wattroff(subwin, A_BOLD | COLOR_PAIR(8));
 
@@ -2067,8 +2059,6 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query,
     mvwprintw(subwin, 8, left_offset + 5 + 8, "%s", "[ ]");
     mvwprintw(subwin, 8, left_offset + 9 + 8, " %s", "[ ]");
 
-    mvwprintw(subwin, 11, left_offset + 19 - 3, "%s", "to");
-
     wattroff(subwin, COLOR_PAIR(7) | A_BOLD);
 
     set_field_back(fields[0], COLOR_PAIR(6) | A_BOLD);
@@ -2078,10 +2068,8 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query,
     set_field_back(fields[4], COLOR_PAIR(7) | A_BOLD);
     set_field_back(fields[5], COLOR_PAIR(7) | A_BOLD);
     set_field_back(fields[6], COLOR_PAIR(7) | A_BOLD);
-    set_field_back(fields[7], COLOR_PAIR(6) | A_BOLD);
-    set_field_back(fields[8], COLOR_PAIR(6) | A_BOLD);
-    set_field_back(fields[9], COLOR_PAIR(7) | A_BOLD);
-    set_field_back(fields[10], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[7], COLOR_PAIR(7) | A_BOLD);
+    set_field_back(fields[8], COLOR_PAIR(7) | A_BOLD);
 
     set_field_buffer(fields[1], 0, perms_str.owner_perm.c_str());
     set_field_buffer(fields[2], 0, perms_str.group_perm.c_str());
@@ -2089,8 +2077,8 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query,
     set_field_buffer(fields[4], 0, "X");
     set_field_buffer(fields[5], 0, "X");
     set_field_buffer(fields[6], 0, "X");
-    set_field_buffer(fields[9], 0, OK_BUTTON);
-    set_field_buffer(fields[10], 0, NO_BUTTON);
+    set_field_buffer(fields[7], 0, OK_BUTTON);
+    set_field_buffer(fields[8], 0, NO_BUTTON);
 
     wrefresh(win);
     pos_form_cursor(my_form);
@@ -2098,10 +2086,9 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query,
 
     bool entry_flag = navigation_find_utility(win, my_form, fields,
                                               _current_dir,
-                                              min_size, max_size,
                                               take_reg, take_dir, take_lnk,
                                               perms_str, _query);
-    for (size_t i = 0; i < 10; i++) {
+    for (size_t i = 0; i < 9; i++) {
         free_field(fields[i]);
     }
 
@@ -2113,29 +2100,18 @@ bool create_find_panel(const std::string &_current_dir, std::string& _query,
 
 bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
                              const std::string& _dir,
-                             std::string& _min_size,
-                             std::string& _max_size,
                              char& take_file, char& take_dir, char& take_lnk,
                              char_permissions& _str_perms,
                              std::string &_query) {
     int ch;
 
     size_t query_index = _query.length();
-    size_t min_size_index = 0;
-    size_t max_size_index = 0;
 
     int query_offset = 0;
-    int min_size_offset = 0;
-    int max_size_offset = 0;
-
-    std::string* current_buffer = &_query;
-
-    size_t* current_index = &query_index;
-    int* current_offset = &query_offset;
 
     size_t index_field = 0;
 
-    display_buffer_on_form(_form, _query, current_index, query_offset, LEN_LINE_FIRST);
+    display_buffer_on_form(_form, _query, &query_index, query_offset, LEN_LINE_FIRST);
 
     auto edit_func = [&](char ch, size_t _ind) {
         if (index_field == 1) {
@@ -2157,29 +2133,16 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
                 form_driver(_form, REQ_NEXT_FIELD);
                 index_field = field_index(current_field(_form));
                 if (index_field == 0) {
-                    set_field_back(_fields[10], COLOR_PAIR(7) | A_BOLD);
-                    current_buffer = &_query;
-                    current_index = &query_index;
-                    current_offset = &query_offset;
+                    set_field_back(_fields[8], COLOR_PAIR(7) | A_BOLD);
                     curs_set(1);
-                } else if (index_field == 1 || index_field == 9) {
+                } else if (index_field == 1) {
                     set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
                     curs_set(0);
                 } else if (index_field == 2 || index_field == 3
                 || index_field == 4 || index_field == 5 || index_field == 6
-                || index_field == 10) {
+                || index_field == 8 || index_field == 7) {
                     set_field_back(_fields[index_field], COLOR_PAIR(8) | A_BOLD);
                     set_field_back(_fields[index_field - 1], COLOR_PAIR(7) | A_BOLD);
-                } else if (index_field == 7) {
-                    set_field_back(_fields[index_field - 1], COLOR_PAIR(7) | A_BOLD);
-                    curs_set(1);
-                    current_buffer = &_min_size;
-                    current_index = &min_size_index;
-                    current_offset = &min_size_offset;
-                } else if (index_field == 8){
-                    current_buffer = &_max_size;
-                    current_index = &max_size_index;
-                    current_offset = &max_size_offset;
                 }
                 break;
             }
@@ -2199,28 +2162,28 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
                     take_lnk == 'X' ? take_lnk = '-' : take_lnk = 'X';
                     char lnk[1] = {take_lnk};
                     set_field_buffer(_fields[index_field], 0, lnk);
-                } else if (index_field == 9) {
+                } else if (index_field == 7) {
                     return true;
-                } else if (index_field == 10){
+                } else if (index_field == 8){
                     return false;
                 }
                 break;
             }
             case KEY_LEFT : {
                 if (is_input_field_dir_file(index_field)) {
-                    move_cursor_left_from_input_field(current_index, current_offset);
+                    move_cursor_left_from_input_field(&query_index, &query_offset);
                 }
                 break;
             }
             case KEY_RIGHT : {
                 if (is_input_field_dir_file(index_field)) {
-                    move_cursor_right_from_input_field(current_buffer->length(), current_index, current_offset);
+                    move_cursor_right_from_input_field(_query.length(), &query_index, &query_offset);
                 }
                 break;
             }
             case KEY_BACKSPACE : {
                 if (is_input_field_find(index_field)) {
-                    delete_char_from_input_field(*current_buffer, current_index, current_offset);
+                    delete_char_from_input_field(_query, &query_index, &query_offset);
                 }
                 break;
             }
@@ -2233,21 +2196,14 @@ bool navigation_find_utility(WINDOW *_win, FORM *_form, FIELD **_fields,
                     } else if (ch == 'x') {
                         edit_func('x', 2);
                     }
-                } else if (is_input_field_find(index_field)) {
-                    if (index_field == 7 || index_field == 8) {
-                        insert_char_from_input_field(*current_buffer, current_index, current_offset, ch, 7);
-                    } else {
-                        insert_char_from_input_field(*current_buffer, current_index, current_offset, ch, LEN_LINE_FIRST);
-                    }
+                }
+                if (is_input_field_find(index_field)) {
+                    insert_char_from_input_field(_query, &query_index, &query_offset, ch, LEN_LINE_FIRST);
                 }
             }
         }
         if (is_input_field_find(index_field)) {
-            if (index_field == 7 || index_field == 8) {
-                display_buffer_on_form(_form, *current_buffer, current_index, *current_offset, 7);
-            } else {
-                display_buffer_on_form(_form, *current_buffer, current_index, *current_offset, LEN_LINE_FIRST);
-            }
+            display_buffer_on_form(_form, _query, &query_index, query_offset, LEN_LINE_FIRST);
         }
         wrefresh(_win);
     }
@@ -2740,7 +2696,7 @@ void filesystem_info_mount() {
 }
 
 bool is_input_field_find(size_t _index) {
-    if (_index == 0 || _index == 7 || _index == 8) {
+    if (_index == 0) {
         return true;
     }
     return false;

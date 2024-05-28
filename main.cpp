@@ -13,10 +13,16 @@ int main() {
 
     bool flag_is_resize = false;
 
-    file_panel left_panel("/home/limbo/COURSE_PROJECT/cmake-build-debug",
+
+   /* file_panel left_panel("/home/limbo/COURSE_PROJECT/cmake-build-debug",
                           LINES - 1, COLS / 2, 0, 0);
     file_panel right_panel("/home/limbo/COURSE_PROJECT/cmake-build-debug",
-                           LINES - 1, COLS / 2, 0, COLS / 2);
+                           LINES - 1, COLS / 2, 0, COLS / 2);*/
+
+    file_panel left_panel(std::filesystem::current_path().string(),
+                           LINES - 1, COLS / 2, 0, 0);
+    file_panel right_panel(std::filesystem::current_path().string(),
+                            LINES - 1, COLS / 2, 0, COLS / 2);
 
     file_panel *current_panel = &left_panel;
     current_panel->set_active_panel(true);

@@ -177,11 +177,10 @@ void history_pagination(size_t _direction, size_t _height, size_t& _start, size_
 void refresh_sub_panel(WINDOW* _win);
 void filesystem_info_mount();
 bool create_find_panel(const std::string& _current_dir, std::string& _result,
-                       std::string& min_size, std::string& max_size, char& take_reg, char& take_dir,
+                       char& take_reg, char& take_dir,
                        char& take_lnk, char_permissions& perms_str);
 bool navigation_find_utility(WINDOW* _win, FORM* _form, FIELD** _fields,
                              const std::string& _dir,
-                             std::string& _min_size, std::string& _max_size,
                              char& _take_reg, char& _take_dir, char& _take_lnk,
                              char_permissions& _str_perms, std::string& _result);
 bool find_collect_results(const std::string& _current_dir, std::string& _query, std::vector<std::string>& _results,
